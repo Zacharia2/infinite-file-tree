@@ -6,8 +6,8 @@ import typescript from '@rollup/plugin-typescript';
 // import million from 'million/compiler';
 import { env } from 'process';
 
-const isProd = env.NODE_ENV === 'production';
-
+// const isProd = env.NODE_ENV === 'production';
+const isProd = false;
 export default {
     context: 'window',
     input: 'src/main.ts',
