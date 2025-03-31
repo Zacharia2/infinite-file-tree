@@ -16,6 +16,15 @@
 文档结点的存储采用日期存储加索引的形式。
 
 插件必须支持移动端
+- tree-item
+  - tree-item-self
+    - tree-item-icon
+    - tree-item-inner
+  - tree-item-children
+
+nav-file-title、nav-file-title-content
+
+is-collapsed、style="margin-inline-start: -34px !important; padding-inline-start: 38px !important"
 
 ```jsx
 // 调用 Tree 组件的示例
