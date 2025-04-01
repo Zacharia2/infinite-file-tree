@@ -66,17 +66,40 @@ function NavFilesContainer(props: {}) {
 function TreeItemNavFile(props: FileTreeProps) {
     // 初始化 depth 为 0，如果不是第一次调用，则使用传入的 depth
     const depth = props.depth || 0;
-    // 缩进大小，可以根据需要调整
-    const indentSize = 2;
+    const indentUnit = 17;
+    //   textIndent: `${depth * 2}em`,
+    const InlineStart = depth * indentUnit;
     return (
         <div className="tree-item nav-file">
             <div
                 className="tree-item-self nav-file-title is-clickable mod-collapsible"
                 data-path="zephyr zone/pages/设计文稿"
                 draggable="true"
-                style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
-                <div className="tree-item-icon collapse-icon is-collapsed">icon</div>
-                <div className="tree-item-inner nav-file-title-content">{props.content}</div>
+                style={{
+                    marginInlineStart: `${-InlineStart}px !important`,
+                    paddingInlineStart: `${InlineStart + 4}px !important`,
+                }}>
+                <div
+                    className="tree-item-icon collapse-icon is-collapsed"
+                    style={{
+                        display: 'inline-block',
+                        width: '0.9rem',
+                        opacity: '0.9',
+                        top: '1rem',
+                        height: '0.9rem',
+                        backgroundSize: 'contain',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'center center',
+                    }}>
+                    <FileIcon></FileIcon>
+                </div>
+                <div
+                    className="tree-item-inner nav-file-title-content"
+                    style={{
+                        display: 'inline-block',
+                    }}>
+                    {props.content}
+                </div>
             </div>
             {props.children.length > 0 &&
                 props.children.map((child, index) => {
@@ -90,27 +113,35 @@ function TreeItemChildren(props: FileTreeProps) {
     return (
         <div className="tree-item-children nav-file-children" style={{}}>
             <div style={{ width: '260px', height: ' 0.1px', marginBottom: '0px' }}></div>
-            <TreeItemNavFile content={''} children={[]}></TreeItemNavFile>
+            <TreeItemNavFile content={props.content} children={props.children} depth={props.depth}></TreeItemNavFile>
             {/* <div className="tree-item nav-file is-collapsed">
-                <div
-                    className="tree-item-self nav-file-title is-clickable mod-collapsible"
-                    data-path="zephyr zone/pages/设计文稿"
-                    draggable="true"
-                    style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
-                    <div className="tree-item-icon collapse-icon is-collapsed">3</div>
-                    <div className="tree-item-inner nav-file-title-content">设计文稿</div>
-                </div>
-            </div>
-            <div className="tree-item nav-file is-collapsed">
-                <div
-                    className="tree-item-self nav-file-title is-clickable mod-collapsible"
-                    data-path="zephyr zone/pages/在构思"
-                    draggable="true"
-                    style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
-                    <div className="tree-item-icon collapse-icon is-collapsed">3</div>
-                    <div className="tree-item-inner nav-file-title-content">在构思</div>
-                </div>
-            </div> */}
+                  <div
+                      className="tree-item-self nav-file-title is-clickable mod-collapsible"
+                      data-path="zephyr zone/pages/设计文稿"
+                      draggable="true"
+                      style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
+                      <div className="tree-item-icon collapse-icon is-collapsed">3</div>
+                      <div className="tree-item-inner nav-file-title-content">设计文稿</div>
+                  </div>
+              </div>
+              <div className="tree-item nav-file is-collapsed">
+                  <div
+                      className="tree-item-self nav-file-title is-clickable mod-collapsible"
+                      data-path="zephyr zone/pages/在构思"
+                      draggable="true"
+                      style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
+                      <div className="tree-item-icon collapse-icon is-collapsed">3</div>
+                      <div className="tree-item-inner nav-file-title-content">在构思</div>
+                  </div>
+              </div> */}
         </div>
+    );
+}
+function FileIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="">
+            <path d="M0 0h24v24H0V0z" fill="none" />
+            <path d="M8 16h8v2H8zm0-4h8v2H8zm6-10H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+        </svg>
     );
 }
