@@ -33,7 +33,7 @@ const myTree = (
         content="Root"
         children={[
             {
-                content: '1 Child 1',
+                text: '1 Child 1',
                 children: [
                     {
                         content: '2 Grandchild 1',
@@ -52,7 +52,7 @@ const myTree = (
                 ],
             },
             {
-                content: '1 Child 2',
+                text: '1 Child 2',
                 children: [],
             },
         ]}
@@ -67,11 +67,11 @@ function Tree(props: { content: string, type?: string, name?: string, depth?: nu
     return (
         <>
             <div>
-                <div style={{ textIndent: `${depth * indentSize}em` }}>{props.content}</div>
+                <div style={{textIndent: `${depth * indentSize}em`}}>{props.content}</div>
                 {props.children.length > 0 &&
                     props.children.map((child, index) => {
                         // 传递当前子元素的 content 和 children 属性
-                        return <Tree key={index} depth={depth + 1} content={child.content} children={child.children} />;
+                        return <Tree key={index} depth={depth + 1} content={child.content} children={child.children}/>;
                     })}
             </div>
         </>
