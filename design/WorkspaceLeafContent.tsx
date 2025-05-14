@@ -23,6 +23,74 @@ import React from 'react';
 // 遍历这个转换后的对象，如果当前节点是另一个节点的子节点，则将其添加到该节点的children数组中
 
 
+// tree
+// 在某个位置做某件事
+// 新建：插入到树中，在结点后创建
+// 删除：清除、连接到父节点、删除子元素
+// 移动：同子元素一起移动
+// 合并
+// 修改
+// 排序：按层排序
+
+// 查找：找相邻结点、找子结点，找父节点、根据id找结点、根据路径找结点
+// 数组下标 关联 结点ID，/ID/ID ->for 取 path 对象结点引用，T.children[i].children[i]
+
+// 表格化、层次化。
+// 自己实现、JSDOM、XML.DOM、tree-tool
+
+
+class Tree {
+
+  addNode() {
+  // 必须知道插入或者新建到什么位置
+  }
+
+  removeNode() {
+  // 必须知道删除什么位置的结点,以及怎么删除
+  }
+
+  moveNode() {
+  // 必须知道移动到什么位置
+  }
+
+  mergeNode() {
+  // 必须知道什么和什么合并
+  }
+
+  modifyNode() {
+  // 必须知道修改的是什么结点
+  }
+
+  sortNode() {
+  }
+
+  findNodeById() {
+  }
+
+  findNodeByPath(pathname: string) {
+  }
+
+  findNodeParent(pathname: string):void;
+  findNodeParent(node: string) {
+  }
+
+  findNodeChildren(pathname: string): void;
+  findNodeChildren(node: string) {
+  }
+
+  findNodeSibling(pathname: string): void;
+  findNodeSibling(node: string) {
+  }
+
+  treeToTable() {
+  // 树变成表,然后存储
+  }
+
+  tableToTree() {
+  // 表变成树，然后使用
+  }
+}
+
 interface FileTreeProps {
   // 结点名称eid
   name?: string;
@@ -30,7 +98,7 @@ interface FileTreeProps {
   field?: Record<string, string>;
   // 结点类型，
   type?: string;
-  // 文本型结点
+  // 文本型结点，或者文件路径
   text?: string;
   depth?: number;
   // 子节点。
