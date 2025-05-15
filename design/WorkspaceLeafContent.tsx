@@ -1,108 +1,12 @@
 import React from 'react';
 
-// ElementID是唯一的。是线性的，是可以整理的。这样就需要自己去管理线性分配槽。一类是占用的，另一类是可用的。
-// 这样就需要检查后，然后去分配。
-// ElementID: path/subpath（superID/subID），结点位置对应表
-// ElementID: FileTreeProps（去掉children属性），结点对象对应表
-
-// 对于重建对象树的过程，要如何优化？是怎样的顺序？是否可以根据结点位置对应表的值进行排序，然后按照排序后的顺序
-// 进行重建对象树？
-
-// 邻接表模型
-// +----+----------+-----------+
-// | id | name     | parent_id |
-// +----+----------+-----------+
-// | 1  | Root     | NULL      |
-// | 2  | Child 1  | 1         |
-// | 3  | Child 2  | 1         |
-// | 4  | Grandchild 1 | 2     |
-// | 5  | Grandchild 2 | 2     |
-// +----+----------+-----------+
-
-// // 将邻接表中的每个节点转换为具有children属性的对象
-// 遍历这个转换后的对象，如果当前节点是另一个节点的子节点，则将其添加到该节点的children数组中
-
-
-// tree
-// 在某个位置做某件事
-// 新建：插入到树中，在结点后创建
-// 删除：清除、连接到父节点、删除子元素
-// 移动：同子元素一起移动
-// 合并
-// 修改
-// 排序：按层排序
-
-// 查找：找相邻结点、找子结点，找父节点、根据id找结点、根据路径找结点
-// 数组下标 关联 结点ID，/ID/ID ->for 取 path 对象结点引用，T.children[i].children[i]
-
-// 表格化、层次化。
-// 自己实现、JSDOM、XML.DOM、tree-tool
-
-
-class Tree {
-
-  addNode() {
-  // 必须知道插入或者新建到什么位置
-  }
-
-  removeNode() {
-  // 必须知道删除什么位置的结点,以及怎么删除
-  }
-
-  moveNode() {
-  // 必须知道移动到什么位置
-  }
-
-  mergeNode() {
-  // 必须知道什么和什么合并
-  }
-
-  modifyNode() {
-  // 必须知道修改的是什么结点
-  }
-
-  sortNode() {
-  }
-
-  findNodeById() {
-  }
-
-  findNodeByPath(pathname: string) {
-  }
-
-  findNodeParent(pathname: string):void;
-  findNodeParent(node: string) {
-  }
-
-  findNodeChildren(pathname: string): void;
-  findNodeChildren(node: string) {
-  }
-
-  findNodeSibling(pathname: string): void;
-  findNodeSibling(node: string) {
-  }
-
-  treeToTable() {
-  // 树变成表,然后存储
-  }
-
-  tableToTree() {
-  // 表变成树，然后使用
-  }
-}
-
-interface FileTreeProps {
-  // 结点名称eid
-  name?: string;
-  // 结点其它字段
-  field?: Record<string, string>;
-  // 结点类型，
-  type?: string;
-  // 文本型结点，或者文件路径
-  text?: string;
+interface FileNode {
+  title?: string; // 结点名称eid
+  type?: string; // 结点类型，
+  text: string; // 文本型结点，或者文件路径
+  field?: Record<string, string>; // 结点字段
   depth?: number;
-  // 子节点。
-  children: FileTreeProps[];
+  children: FileNode[]; // 子节点。
 }
 
 function WorkspaceLeafContent(props: {}) {
@@ -167,7 +71,7 @@ function NavFilesContainer(props: {}) {
   );
 }
 
-function TreeItemNavFile(props: FileTreeProps) {
+function TreeItemNavFile(props: FileNode) {
   // 初始化 depth 为 0，如果不是第一次调用，则使用传入的 depth
   const depth = props.depth || 0;
   // const indentUnit = 17;
@@ -209,7 +113,7 @@ function TreeItemNavFile(props: FileTreeProps) {
   );
 }
 
-function TreeItemChildren(props: FileTreeProps) {
+function TreeItemChildren(props: FileNode) {
   return (
     <div className="tree-item-children nav-file-children" style={{}}>
       <div style={{width: '260px', height: ' 0.1px', marginBottom: '0px'}}></div>
