@@ -41,39 +41,80 @@
 
 import {JSDOM} from "jsdom";
 
-interface FileNode {
-  title?: string; // 结点名称eid
-  type?: string; // 结点类型，
-  text: string; // 文本型结点，或者文件路径
-  field?: Record<string, string>; // 结点字段
-  depth?: number;
-  children: FileNode[]; // 子节点。
-  [key: string]: any;
+class NidRegister {
+  private registerList = new Set<number>();
+  private freeList: number[] = [];
+
+  constructor();
+  constructor(table?: number[]) {
+    if (!table) return
+    table.forEach((value) => {
+      this.registerList.add(value);
+    });
+  }
+
+  applyNid(): number {
+    if (this.freeList.length > 0) {
+      return this.freeList.pop()!;
+    }
+    for (let i = 0; i < Number.MAX_VALUE; i++) {
+      if (!this.registerList.has(i)) {
+        this.registerList.add(i);
+        return i;
+      }
+    }
+    throw new Error("No available ID");
+  }
+
+  releaseNid(nid: number) {
+    this.registerList.delete(nid);
+    this.freeList.push(nid);
+  }
+
+  register(nid: number) {
+    if (!this.registerList.has(nid)) {
+      this.registerList.add(nid);
+      this.freeList = this.freeList.filter((x) => x !== nid);
+    } else {
+      return this.applyNid()
+    }
+  }
+
+  toString() {
+    return "Nid: " + [...this.registerList.values()];
+  }
+
+  toArray() {
+    return [...this.registerList.values()];
+  }
 }
 
-type nodeLine = {
-  id: number;
-  parentId: number;
-  name: string;
-  type?: string;
-  text?: string;
-  field?: Record<string, string>;
-  depth?: number;
-  [key: string]: any;
-}
-const flatTable: nodeLine[] = [
-  {id: 1, parentId: null, name: '1 Child 1'},
-  {id: 2, parentId: 1, name: '2 Grandchild 1'},
-  {id: 3, parentId: 2, name: '3 Child 3'},
-  {id: 4, parentId: 3, name: '4 Grandchild 3'},
-  {id: 5, parentId: null, name: '1 Child 2'},
-];
-
-// @ts-ignore
 class QuantumTree {
+  private empty_xml = `<itree id="tree"></itree>`
+  private dom: JSDOM;
+  private doc: Document;
+  private root: HTMLElement
+  private nidRegister: NidRegister;
 
-  createNode() {
+  constructor(nidRegister?: NidRegister) {
+    this.dom = new JSDOM(this.empty_xml, {contentType: "text/xml",});
+    this.doc = this.dom.window.document;
+    this.root = this.doc.getElementById("tree")
+    if (nidRegister) {
+      this.nidRegister = nidRegister
+    } else {
+      this.nidRegister = new NidRegister()
+    }
+  }
+
+  createNode(nid: number, node: nodeLine) {
     // 必须知道插入或者新建到什么位置
+    const element = this.doc.createElement("node")
+    node.id = this.nidRegister.applyNid()
+    Object.keys(node).map((key) => {
+      element.setAttribute(key, node[key]);
+    })
+    this.doc.getElementById(nid.toString()).parentNode.appendChild(element)
   }
 
   removeNode() {
@@ -119,7 +160,7 @@ class QuantumTree {
         const node: nodeLine = {
           id: 0,
           parentId: 0,
-          name: ""
+          text: ""
         }
         for (let i = 0; i < child.attributes.length; i++) {
           switch (child.attributes[i].name) {
@@ -128,10 +169,12 @@ class QuantumTree {
               node[child.attributes[i].name] = Number(child.attributes[i].value);
               break;
             case "parentId":
-              if (child.attributes[i].value === "null") {
-                node[child.attributes[i].name] = null;
+              const parentNode = child.parentNode as Element;
+              let parentId = parentNode.getAttribute("id");
+              if (parentId === "tree") {
+                node[child.attributes[i].name] = null
               } else {
-                node[child.attributes[i].name] = Number(child.attributes[i].value);
+                node[child.attributes[i].name] = Number(parentId)
               }
               break;
             default:
@@ -161,7 +204,14 @@ class QuantumTree {
     flatArray.map(cursorLine => {
       const element = doc.createElement("node")
       Object.keys(cursorLine).map((key) => {
-        element.setAttribute(key, cursorLine[key]);
+        switch (key) {
+          case "id":
+            element.setAttribute(key, cursorLine[key].toString());
+            break;
+          default:
+            element.setAttribute(key, cursorLine[key]);
+            break;
+        }
       })
       map.set(cursorLine.id, element);
     })
@@ -187,12 +237,34 @@ class QuantumTree {
   }
 }
 
-
-class NodeIDRegister {
-  // 负责node 的ID的注册，注销
-  // 存储一个列表 已注册的内容关联
-  // 申请ID，释放ID
+interface FileNode {
+  title?: string; // 结点名称eid
+  type?: string; // 结点类型，
+  text: string; // 文本型结点，或者文件路径
+  field?: Record<string, string>; // 结点字段
+  depth?: number;
+  children: FileNode[]; // 子节点。
+  [key: string]: any;
 }
 
-let tree = new QuantumTree();
+type nodeLine = {
+  id: number;
+  parentId: number;
+  type?: string;
+  text?: string;
+  field?: Record<string, string>;
+  depth?: number;
+  [key: string]: any;
+}
+
+const flatTable: nodeLine[] = [
+  {id: 1, parentId: null, text: '1 Child 1'},
+  {id: 2, parentId: 1, text: '2 Grandchild 1'},
+  {id: 3, parentId: 2, text: '3 Child 3'},
+  {id: 4, parentId: 3, text: '4 Grandchild 3'},
+  {id: 5, parentId: null, text: '1 Child 2'},
+];
+
+
+let tree = new QuantumTree(new NidRegister());
 tree.tableToTree(tree.treeToTable(tree.tableToTree(flatTable)))
