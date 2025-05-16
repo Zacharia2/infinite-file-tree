@@ -109,8 +109,45 @@ class QuantumTree {
   findSiblingNode(node: string) {
   }
 
-  treeToTable() {
+  treeToTable(doc: Document) {
     // 树变成表,然后存储
+    const tree_root = doc.getElementById("tree")
+    let table: nodeLine[] = []
+
+    function buildTable(children: HTMLCollection) {
+      for (const child of children) {
+        const node: nodeLine = {
+          id: 0,
+          parentId: 0,
+          name: ""
+        }
+        for (let i = 0; i < child.attributes.length; i++) {
+          switch (child.attributes[i].name) {
+            case "id":
+            case "depth":
+              node[child.attributes[i].name] = Number(child.attributes[i].value);
+              break;
+            case "parentId":
+              if (child.attributes[i].value === "null") {
+                node[child.attributes[i].name] = null;
+              } else {
+                node[child.attributes[i].name] = Number(child.attributes[i].value);
+              }
+              break;
+            default:
+              node[child.attributes[i].name] = child.attributes[i].value;
+          }
+
+        }
+        table.push(node);
+        if (child.hasChildNodes()) {
+          buildTable(child.children)
+        }
+      }
+    }
+
+    buildTable(tree_root.children)
+    return table
   }
 
   tableToTree(flatArray: nodeLine[]) {
@@ -145,6 +182,7 @@ class QuantumTree {
       .map(rootNode => {
         tree_root.appendChild(buildTree(map.get(rootNode.id)))
       });
+    console.log(dom.serialize())
     return doc
   }
 }
@@ -157,15 +195,4 @@ class NodeIDRegister {
 }
 
 let tree = new QuantumTree();
-tree.tableToTree(flatTable)
-
-// console.log(dom.serialize())
-// 然后DOM转对象树或者直接使用dom树。
-// let find = doc.getElementById("2")
-
-// for (const findElement of find.children) {
-//   console.log(findElement.getAttribute("text"))
-//   if (findElement.hasChildNodes()) {
-//     console.log(findElement.children[0].getAttribute("text"))
-//   }
-// }
+tree.tableToTree(tree.treeToTable(tree.tableToTree(flatTable)))
