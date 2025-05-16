@@ -48,32 +48,26 @@ interface FileNode {
   field?: Record<string, string>; // 结点字段
   depth?: number;
   children: FileNode[]; // 子节点。
+  [key: string]: any;
 }
 
-let xml = `
-<tree id="root">
-    <node id="1" text="1 Child 1">
-        <node id="2" text="2 Grandchild 1">
-            <node id="3" text="3 Child 3">
-                <node id="4" text="4 Grandchild 3"></node>
-            </node>
-        </node>
-    </node>
-    <node id="5" text="1 Child 2"></node>
-</tree>`
-
-type cursor_line = { id: string, parentId: string, name: string }
-
-const flatArray: cursor_line[] = [
-  {id: "1", parentId: "null", name: 'root'},
-  {id: "2", parentId: "1", name: '1 Child 1'},
-  {id: "3", parentId: "2", name: '2 Grandchild 1'},
-  {id: "4", parentId: "3", name: '3 Child 3'},
-  {id: "5", parentId: "4", name: '4 Grandchild 3'},
-  {id: "6", parentId: "1", name: '1 Child 2'},
+type nodeLine = {
+  id: number;
+  parentId: number;
+  name: string;
+  type?: string;
+  text?: string;
+  field?: Record<string, string>;
+  depth?: number;
+  [key: string]: any;
+}
+const flatTable: nodeLine[] = [
+  {id: 1, parentId: null, name: '1 Child 1'},
+  {id: 2, parentId: 1, name: '2 Grandchild 1'},
+  {id: 3, parentId: 2, name: '3 Child 3'},
+  {id: 4, parentId: 3, name: '4 Grandchild 3'},
+  {id: 5, parentId: null, name: '1 Child 2'},
 ];
-
-let empty_xml = `<tree id="root"></tree>`
 
 // @ts-ignore
 class QuantumTree {
@@ -119,66 +113,59 @@ class QuantumTree {
     // 树变成表,然后存储
   }
 
-  tableToTree() {
+  tableToTree(flatArray: nodeLine[]) {
     // 表变成树，然后使用
-
-
+    const empty_xml = `<itree id="tree"></itree>`
     const dom = new JSDOM(empty_xml, {contentType: "text/xml",});
     const doc = dom.window.document;
 
-    let root = doc.getElementById("root")
-    // let nodes = table.map(cursor_line => {
-    //   const no = doc.createElement("node")
-    //   no.setAttribute("id", cursor_line[0])
-    //   no.setAttribute("name", cursor_line[1])
-    //   no.setAttribute("parent_id", cursor_line[2])
-    //   return no;
-    // })
-    // 创建一个映射，方便通过id查找节点
-    const map = new Map();
-    flatArray.map(cursor_line => {
-      const no = doc.createElement("node")
-      for (let key of Object.keys(cursor_line)) {
-        no.setAttribute(key, cursor_line[key as keyof typeof cursor_line]);
-      }
-      map.set(cursor_line.id, no);
+    const tree_root = doc.getElementById("tree")
+    const map = new Map(); // 创建一个映射，方便通过id查找节点
+    flatArray.map(cursorLine => {
+      const element = doc.createElement("node")
+      Object.keys(cursorLine).map((key) => {
+        element.setAttribute(key, cursorLine[key]);
+      })
+      map.set(cursorLine.id, element);
     })
-    console.log(map)
 
     // 定义一个递归函数，用于构建每个节点的子树
     function buildTree(node: HTMLElement) {
       flatArray.forEach(item => {
-        if (item.parentId === node.getAttribute("id")) {
+        if (item.parentId === Number(node.getAttribute("id"))) {
           const childNode = map.get(item.id) as HTMLElement
           node.appendChild(buildTree(childNode));
         }
       })
       return node;
     }
-    let elements = flatArray
-      .filter(item => item.parentId === "null")
-      .map(rootNode => buildTree(map.get(rootNode.id)));
-    for (const element of elements) {
-      root.appendChild(element)
-    }
-    console.log(dom.serialize())
-    // let find = doc.getElementById("2")
 
-    // for (const findElement of find.children) {
-    //   console.log(findElement.getAttribute("text"))
-    //   if (findElement.hasChildNodes()) {
-    //     console.log(findElement.children[0].getAttribute("text"))
-    //   }
-    // }
+    flatArray
+      .filter(item => item.parentId === null)
+      .map(rootNode => {
+        tree_root.appendChild(buildTree(map.get(rootNode.id)))
+      });
+    return doc
   }
 }
 
 
-class EidRegister {
+class NodeIDRegister {
   // 负责node 的ID的注册，注销
   // 存储一个列表 已注册的内容关联
   // 申请ID，释放ID
 }
 
 let tree = new QuantumTree();
-tree.tableToTree()
+tree.tableToTree(flatTable)
+
+// console.log(dom.serialize())
+// 然后DOM转对象树或者直接使用dom树。
+// let find = doc.getElementById("2")
+
+// for (const findElement of find.children) {
+//   console.log(findElement.getAttribute("text"))
+//   if (findElement.hasChildNodes()) {
+//     console.log(findElement.children[0].getAttribute("text"))
+//   }
+// }
