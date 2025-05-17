@@ -36,14 +36,15 @@
     },
     "dependencies": {
         "@ozntel/local-storage-handler": "1.0.3",
+        "@xmldom/xmldom": "^0.9.8",
         "common-tags": "1.8.2",
         "dayjs": "1.11.10",
-        "jsdom": "^26.1.0",
         "react": "18.2.0",
         "react-dom": "18.2.0",
         "react-dropzone": "14.2.3",
         "react-icons": "4.12.0",
         "react-lazy-load": "^4.0.1",
-        "recoil": "0.7.7"
+        "recoil": "0.7.7",
+        "xml-formatter": "^3.6.6"
     }
 }

@@ -1,51 +1,35 @@
+// 主表QuantumTree创建，自动创建从表NidRegister。
 // ElementID是唯一的。是线性的，是可以整理的。这样就需要自己去管理线性分配槽。一类是占用的，另一类是可用的。
 // 这样就需要检查后，然后去分配。
 // ElementID: path/subpath（superID/subID），结点位置对应表
 // ElementID: FileTreeProps（去掉children属性），结点对象对应表
 
-// 对于重建对象树的过程，要如何优化？是怎样的顺序？是否可以根据结点位置对应表的值进行排序，然后按照排序后的顺序
-// 进行重建对象树？
-
-// 邻接表模型
-// +----+----------+-----------+
-// | id | name     | parent_id |
-// +----+----------+-----------+
-// | 1  | Root     | NULL      |
-// | 2  | Child 1  | 1         |
-// | 3  | Child 2  | 1         |
-// | 4  | Grandchild 1 | 2     |
-// | 5  | Grandchild 2 | 2     |
-// +----+----------+-----------+
-
-// cursor
-
-// // 将邻接表中的每个节点转换为具有children属性的对象
-// 遍历这个转换后的对象，如果当前节点是另一个节点的子节点，则将其添加到该节点的children数组中
-
-
-// tree
-// 在某个位置做某件事
-// 新建：插入到树中，在结点后创建
-// 删除：清除、连接到父节点、删除子元素
-// 移动：同子元素一起移动
-// 合并
-// 修改
-// 排序：按层排序
-
 // 查找：找相邻结点、找子结点，找父节点、根据id找结点、根据路径找结点
 // 数组下标 关联 结点ID，/ID/ID ->for 取 path 对象结点引用，T.children[i].children[i]
+// 若结点有唯一ID，呢么就可以创建一个路径 关联 ID的表。
 
-// 表格化、层次化。
-// 自己实现、JSDOM、XML.DOM、tree-tool
+import xmlFormat from 'xml-formatter';
+import {Document, DOMParser, Element, NodeList, XMLSerializer} from '@xmldom/xmldom';
 
+interface Entry {
+  id: string; //条目ID
+  name?: string; //条目名字
+  note?: string; //条目对应的笔记
+  type?: string; //条目类型
+  tag?: string; //条目标签
+  field?: string; //文本型json
+  [key: string]: string;
+}
 
-import {JSDOM} from "jsdom";
+interface EntryLine extends Entry {
+  depth?: string; //条目所在位置深度
+  parentId: string; //条目所在父条目ID
+}
 
 class NidRegister {
   private registerList = new Set<number>();
   private freeList: number[] = [];
 
-  constructor();
   constructor(table?: number[]) {
     if (!table) return
     table.forEach((value) => {
@@ -53,14 +37,14 @@ class NidRegister {
     });
   }
 
-  applyNid(): number {
+  applyNid(): string {
     if (this.freeList.length > 0) {
-      return this.freeList.pop()!;
+      return String(this.freeList.pop()!);
     }
     for (let i = 0; i < Number.MAX_VALUE; i++) {
       if (!this.registerList.has(i)) {
         this.registerList.add(i);
-        return i;
+        return String(i);
       }
     }
     throw new Error("No available ID");
@@ -69,15 +53,6 @@ class NidRegister {
   releaseNid(nid: number) {
     this.registerList.delete(nid);
     this.freeList.push(nid);
-  }
-
-  register(nid: number) {
-    if (!this.registerList.has(nid)) {
-      this.registerList.add(nid);
-      this.freeList = this.freeList.filter((x) => x !== nid);
-    } else {
-      return this.applyNid()
-    }
   }
 
   toString() {
@@ -89,25 +64,38 @@ class NidRegister {
   }
 }
 
-class QuantumTree {
-  private empty_xml = `<itree id="tree"></itree>`
-  private dom: JSDOM;
+class EntryTree {
   private doc: Document;
-  private root: HTMLElement
+  private root: Element;
+  private readonly dom: DOMParser = new DOMParser();
+  private readonly empty_xml = `<itree id="tree"></itree>`
   private nidRegister: NidRegister;
 
-  constructor(nidRegister?: NidRegister) {
-    this.dom = new JSDOM(this.empty_xml, {contentType: "text/xml",});
-    this.doc = this.dom.window.document;
+  constructor() {
+    this.doc = this.dom.parseFromString(this.empty_xml, "text/xml");
     this.root = this.doc.getElementById("tree")
-    if (nidRegister) {
-      this.nidRegister = nidRegister
-    } else {
-      this.nidRegister = new NidRegister()
-    }
+    this.nidRegister = new NidRegister()
   }
 
-  createNode(nid: number, node: nodeLine) {
+  setNidRegister(nidRegister: NidRegister) {
+    this.nidRegister = nidRegister
+    return this
+  }
+
+  getRoot() {
+    return this.root;
+  }
+
+  getDocument() {
+    return this.doc
+  }
+
+  /**
+   * 在某个条目下面创建条目
+   * @param nid 指定的条目位置
+   * @param node 需要创建的条目
+   */
+  createNode(nid: number, node: Entry) {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
     node.id = this.nidRegister.applyNid()
@@ -115,156 +103,166 @@ class QuantumTree {
       element.setAttribute(key, node[key]);
     })
     this.doc.getElementById(nid.toString()).parentNode.appendChild(element)
+    return this
   }
 
-  removeNode() {
+  /**
+   * 连接到父节点：删除指定条目，条目下所以子条目连接到父条目
+   * @param nid_target
+   */
+  removeNode(nid_target: number) {
     // 必须知道删除什么位置的结点,以及怎么删除
+    // 删除有清除文件只保留结点标题、连接到父节点、删除子元素三种方式
+    const target_node = this.doc.getElementById(nid_target.toString())
+    for (const targetNodeElement of target_node.childNodes) {
+      target_node.parentNode.appendChild(targetNodeElement.cloneNode(true))
+    }
+    target_node.parentNode.removeChild(target_node)
+    return this
   }
 
-  moveNode() {
+  /**
+   * 删除分支，包含此条目以及此条目下所有子条目
+   * @param nid
+   */
+  removeBranch(nid: number) {
+    const needDelBranch = this.findNodeById(nid)
+    needDelBranch.parentNode.removeChild(needDelBranch)
+    return this
+  }
+
+  removeNote(nid: number) {
+    const needDelNodeOfNote = this.findNodeById(nid)
+    needDelNodeOfNote.setAttribute("note", null)
+    return this
+  }
+
+  /**
+   * 移动条目到目标条目下
+   * @param sourceNid
+   * @param targetNid
+   */
+  moveNode(sourceNid: number, targetNid: number) {
     // 必须知道移动到什么位置
+    // 移动单个结点，移动一个分支，这个没差。统一视为一类
+    // 从某个位置移动到某个位置。
+    const source_node = this.findNodeById(sourceNid)
+    const target_node = this.findNodeById(targetNid)
+    target_node.appendChild(source_node.cloneNode(true))
+    source_node.setAttribute("parentId", targetNid.toString())
+    source_node.parentNode.removeChild(source_node)
+    return this
   }
 
   mergeNode() {
     // 必须知道什么和什么合并
   }
 
-  sortNode() {
+  /**
+   * 排序是按name根据不同方式，支持中英数字，中文使用首字母，选择分支排序。
+   */
+  sortNode(branchNid: number) {
   }
 
-  findNodeById() {
+  findNodeById(nid: number) {
+    return this.doc.getElementById(nid.toString())
   }
 
-  findNodeByPath(pathname: string) {
-  }
+  /**
+   * 树变成表,然后存储
+   */
+  toTable() {
+    let table: EntryLine[] = []
 
-  findParentNode(pathname: string): void;
-  findParentNode(node: string) {
-  }
-
-  findChildrenNode(pathname: string): void;
-  findChildrenNode(node: string) {
-  }
-
-  findSiblingNode(pathname: string): void;
-  findSiblingNode(node: string) {
-  }
-
-  treeToTable(doc: Document) {
-    // 树变成表,然后存储
-    const tree_root = doc.getElementById("tree")
-    let table: nodeLine[] = []
-
-    function buildTable(children: HTMLCollection) {
-      for (const child of children) {
-        const node: nodeLine = {
-          id: 0,
-          parentId: 0,
-          text: ""
-        }
+    function buildTable(children: NodeList) {
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i] as Element
+        const node: EntryLine = {id: "", parentId: "", text: ""}
         for (let i = 0; i < child.attributes.length; i++) {
           switch (child.attributes[i].name) {
-            case "id":
-            case "depth":
-              node[child.attributes[i].name] = Number(child.attributes[i].value);
-              break;
             case "parentId":
               const parentNode = child.parentNode as Element;
               let parentId = parentNode.getAttribute("id");
               if (parentId === "tree") {
                 node[child.attributes[i].name] = null
               } else {
-                node[child.attributes[i].name] = Number(parentId)
+                node[child.attributes[i].name] = parentId
               }
               break;
             default:
               node[child.attributes[i].name] = child.attributes[i].value;
           }
-
         }
         table.push(node);
         if (child.hasChildNodes()) {
-          buildTable(child.children)
+          buildTable(child.childNodes)
         }
       }
     }
 
-    buildTable(tree_root.children)
+    buildTable(this.root.childNodes)
     return table
   }
 
-  tableToTree(flatArray: nodeLine[]) {
+  fromTable(flatTable: Entry[]) {
     // 表变成树，然后使用
-    const empty_xml = `<itree id="tree"></itree>`
-    const dom = new JSDOM(empty_xml, {contentType: "text/xml",});
-    const doc = dom.window.document;
-
-    const tree_root = doc.getElementById("tree")
-    const map = new Map(); // 创建一个映射，方便通过id查找节点
-    flatArray.map(cursorLine => {
-      const element = doc.createElement("node")
-      Object.keys(cursorLine).map((key) => {
+    const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
+    this.doc = this.dom.parseFromString(this.empty_xml, "text/xml")
+    this.root = this.doc.getElementById("tree")
+    flatTable.map(line => {
+      const entry = this.doc.createElement("node")
+      Object.keys(line).map((key) => {
         switch (key) {
           case "id":
-            element.setAttribute(key, cursorLine[key].toString());
+            entry.setAttribute(key, line[key].toString());
             break;
           default:
-            element.setAttribute(key, cursorLine[key]);
+            entry.setAttribute(key, line[key]);
             break;
         }
       })
-      map.set(cursorLine.id, element);
+      entryMap.set(line.id, entry);
     })
 
     // 定义一个递归函数，用于构建每个节点的子树
-    function buildTree(node: HTMLElement) {
-      flatArray.forEach(item => {
-        if (item.parentId === Number(node.getAttribute("id"))) {
-          const childNode = map.get(item.id) as HTMLElement
-          node.appendChild(buildTree(childNode));
+    function buildTree(entry: Element) {
+      flatTable.forEach(line => {
+        if (line.parentId === entry.getAttribute("id")) {
+          const childNode = entryMap.get(line.id)
+          entry.appendChild(buildTree(childNode));
         }
       })
-      return node;
+      return entry;
     }
 
-    flatArray
+    flatTable
       .filter(item => item.parentId === null)
       .map(rootNode => {
-        tree_root.appendChild(buildTree(map.get(rootNode.id)))
+        this.root.appendChild(buildTree(entryMap.get(rootNode.id)))
       });
-    console.log(dom.serialize())
-    return doc
+    return this
+  }
+
+  toString() {
+    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)))
+    console.log(`NidTable: ${this.nidRegister.toArray()}`)
   }
 }
 
-interface FileNode {
-  title?: string; // 结点名称eid
-  type?: string; // 结点类型，
-  text: string; // 文本型结点，或者文件路径
-  field?: Record<string, string>; // 结点字段
-  depth?: number;
-  children: FileNode[]; // 子节点。
-  [key: string]: any;
-}
 
-type nodeLine = {
-  id: number;
-  parentId: number;
-  type?: string;
-  text?: string;
-  field?: Record<string, string>;
-  depth?: number;
-  [key: string]: any;
-}
-
-const flatTable: nodeLine[] = [
-  {id: 1, parentId: null, text: '1 Child 1'},
-  {id: 2, parentId: 1, text: '2 Grandchild 1'},
-  {id: 3, parentId: 2, text: '3 Child 3'},
-  {id: 4, parentId: 3, text: '4 Grandchild 3'},
-  {id: 5, parentId: null, text: '1 Child 2'},
+const flatTable: EntryLine[] = [
+  {id: "1", parentId: null, text: '1 Child 1'},
+  {id: "2", parentId: "1", text: '2 Grandchild 1'},
+  {id: "3", parentId: "2", text: '3 Child 3'},
+  {id: "4", parentId: "3", text: '4 Grandchild 3'},
+  {id: "5", parentId: "4", text: '5 Grandchild 3'},
+  {id: "6", parentId: null, text: '1 Child 2'},
 ];
 
 
-let tree = new QuantumTree(new NidRegister());
-tree.tableToTree(tree.treeToTable(tree.tableToTree(flatTable)))
+let entryTree = new EntryTree();
+entryTree.setNidRegister(new NidRegister([1, 2, 3, 4, 5])).fromTable(flatTable)
+entryTree.moveNode(3, 6)
+entryTree.toString();
+entryTree.removeNode(3)
+entryTree.toString();
