@@ -10,6 +10,7 @@
 
 import xmlFormat from 'xml-formatter';
 import {Document, DOMParser, Element, NodeList, XMLSerializer} from '@xmldom/xmldom';
+import initSqlJs from "sql.js";
 
 interface Entry {
   id: string; //条目ID
@@ -266,3 +267,16 @@ entryTree.moveNode(3, 6)
 entryTree.toString();
 entryTree.removeNode(3)
 entryTree.toString();
+
+initSqlJs().then(function (SQL) {
+  // Create a new database with our existing sample.sqlite file
+  const db = new SQL.Database();
+  // RUNNING SQL QUERIES 👇
+  db.run("CREATE TABLE users (id, name, phone, address);");
+  db.run(
+    `INSERT INTO users (id, name, phone, address)
+     VALUES (1, 'John Doe', '+234-907788', '12 Igodan Street, Okitipupa')`
+  );
+  var data = db.export();
+  console.log("data", data);
+});
