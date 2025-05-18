@@ -8,13 +8,17 @@
 // 数组下标 关联 结点ID，/ID/ID ->for 取 path 对象结点引用，T.children[i].children[i]
 // 若结点有唯一ID，呢么就可以创建一个路径 关联 ID的表。
 
+// 在设计时路径Path不是必要条件
+
 import xmlFormat from 'xml-formatter';
 import {Document, DOMParser, Element, NodeList, XMLSerializer} from '@xmldom/xmldom';
-import initSqlJs from "sql.js";
+import initSqlJs, {Database} from "sql.js";
+import {existsSync, readFileSync, writeFileSync} from "fs";
+import path from "path";
 
 interface Entry {
-  id: string; //条目ID
-  name?: string; //条目名字
+  id?: string; //条目ID
+  name: string; //条目名字
   note?: string; //条目对应的笔记
   type?: string; //条目类型
   tag?: string; //条目标签
@@ -23,6 +27,7 @@ interface Entry {
 }
 
 interface EntryLine extends Entry {
+  id: string; //条目ID
   depth?: string; //条目所在位置深度
   parentId: string; //条目所在父条目ID
 }
@@ -96,14 +101,30 @@ class EntryTree {
    * @param nid 指定的条目位置
    * @param node 需要创建的条目
    */
-  createNode(nid: number, node: Entry) {
+  createChildOfNode(nid: number, node: Entry) {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
     node.id = this.nidRegister.applyNid()
     Object.keys(node).map((key) => {
       element.setAttribute(key, node[key]);
     })
-    this.doc.getElementById(nid.toString()).parentNode.appendChild(element)
+    this.findNodeById(nid).appendChild(element)
+    return this
+  }
+
+  /**
+   * 创建条目的兄弟条目
+   * @param nid 指定的条目位置
+   * @param node 需要创建的条目
+   */
+  createSiblingOfNode(nid: number, node: Entry) {
+    // 必须知道插入或者新建到什么位置
+    const element = this.doc.createElement("node")
+    node.id = this.nidRegister.applyNid()
+    Object.keys(node).map((key) => {
+      element.setAttribute(key, node[key]);
+    })
+    this.findNodeById(nid).parentNode.appendChild(element)
     return this
   }
 
@@ -178,23 +199,18 @@ class EntryTree {
     function buildTable(children: NodeList) {
       for (let i = 0; i < children.length; i++) {
         const child = children[i] as Element
-        const node: EntryLine = {id: "", parentId: "", text: ""}
-        for (let i = 0; i < child.attributes.length; i++) {
-          switch (child.attributes[i].name) {
-            case "parentId":
-              const parentNode = child.parentNode as Element;
-              let parentId = parentNode.getAttribute("id");
-              if (parentId === "tree") {
-                node[child.attributes[i].name] = null
-              } else {
-                node[child.attributes[i].name] = parentId
-              }
-              break;
-            default:
-              node[child.attributes[i].name] = child.attributes[i].value;
-          }
+        const entryLine: EntryLine = {id: '', parentId: '', name: ''}
+        const parentNode = child.parentNode as Element;
+        const parentId = parentNode.getAttribute("id");
+        if (parentId === "tree") {
+          entryLine["parentId"] = null
+        } else {
+          entryLine["parentId"] = parentId
         }
-        table.push(node);
+        for (let i = 0; i < child.attributes.length; i++) {
+          entryLine[child.attributes[i].name] = child.attributes[i].value;
+        }
+        table.push(entryLine);
         if (child.hasChildNodes()) {
           buildTable(child.childNodes)
         }
@@ -205,22 +221,19 @@ class EntryTree {
     return table
   }
 
+  /**
+   * // 表变成树，然后使用
+   * @param flatTable
+   */
   fromTable(flatTable: Entry[]) {
-    // 表变成树，然后使用
     const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
     this.doc = this.dom.parseFromString(this.empty_xml, "text/xml")
     this.root = this.doc.getElementById("tree")
     flatTable.map(line => {
       const entry = this.doc.createElement("node")
       Object.keys(line).map((key) => {
-        switch (key) {
-          case "id":
-            entry.setAttribute(key, line[key].toString());
-            break;
-          default:
-            entry.setAttribute(key, line[key]);
-            break;
-        }
+        if (key === "parentId") return
+        entry.setAttribute(key, line[key]);
       })
       entryMap.set(line.id, entry);
     })
@@ -250,33 +263,82 @@ class EntryTree {
   }
 }
 
+class DBService {
+  private dbFilePath: string;
+  private DB: Database;
+
+  constructor(dbPath: string) {
+    this.dbFilePath = path.resolve(dbPath);
+  }
+
+  async read() {
+    // 如果DBPath下不存在db文件就创建一个新数据库，如果不为空就读取二进制数据库然后构建数据库
+    if (!existsSync(this.dbFilePath)) {
+      const SQL = await initSqlJs()
+      // Create a new database with our existing sample.sqlite file
+      this.DB = new SQL.Database();
+      // RUNNING SQL QUERIES 👇
+      this.DB.run(`create table ADJACENCY
+                   (
+                       id       TEXT not null
+                           primary key,
+                       parentId TEXT,
+                       name     TEXT,
+                       note     TEXT,
+                       type     TEXT,
+                       tag      TEXT,
+                       field    TEXT,
+                       depth    TEXT
+                   );`);
+    } else {
+      const SQL = await initSqlJs()
+      // Create a new database with our existing sample.sqlite file
+      const dbFileBuffer = readFileSync(this.dbFilePath);
+      this.DB = new SQL.Database(dbFileBuffer)
+    }
+  }
+
+  getDB(): Database {
+    return this.DB;
+  }
+
+  async close() {
+    //   写出数据库二进制
+    writeFileSync(this.dbFilePath, this.DB.export());
+    this.dbFilePath = null;
+  }
+}
+
 
 const flatTable: EntryLine[] = [
-  {id: "1", parentId: null, text: '1 Child 1'},
-  {id: "2", parentId: "1", text: '2 Grandchild 1'},
-  {id: "3", parentId: "2", text: '3 Child 3'},
-  {id: "4", parentId: "3", text: '4 Grandchild 3'},
-  {id: "5", parentId: "4", text: '5 Grandchild 3'},
-  {id: "6", parentId: null, text: '1 Child 2'},
+  {id: "1", parentId: null, name: '1 Child 1'},
+  {id: "2", parentId: "1", name: '2 Grandchild 1'},
+  {id: "3", parentId: "2", name: '3 Child 3'},
+  {id: "4", parentId: "3", name: '4 Grandchild 3'},
+  {id: "5", parentId: "4", name: '5 Grandchild 3'},
+  {id: "6", parentId: null, name: '1 Child 2'},
 ];
 
 
 let entryTree = new EntryTree();
-entryTree.setNidRegister(new NidRegister([1, 2, 3, 4, 5])).fromTable(flatTable)
+entryTree.setNidRegister(new NidRegister([1, 2, 3, 4, 5]))
+entryTree.fromTable(flatTable)
+let table = entryTree.toTable()
+entryTree.fromTable(table)
 entryTree.moveNode(3, 6)
 entryTree.toString();
-entryTree.removeNode(3)
+entryTree.createChildOfNode(3, {name: '1 Child 1'})
 entryTree.toString();
 
-initSqlJs().then(function (SQL) {
-  // Create a new database with our existing sample.sqlite file
-  const db = new SQL.Database();
-  // RUNNING SQL QUERIES 👇
-  db.run("CREATE TABLE users (id, name, phone, address);");
-  db.run(
-    `INSERT INTO users (id, name, phone, address)
-     VALUES (1, 'John Doe', '+234-907788', '12 Igodan Street, Okitipupa')`
-  );
-  var data = db.export();
-  console.log("data", data);
-});
+let db = new DBService("D:\\GitHub\\KCMS\\.obsidian\\plugins\\infinite-file-tree\\identifier.sqlite")
+
+async function f() {
+  await db.read()
+  flatTable.map((item) => {
+    db.getDB().run(`INSERT INTO ADJACENCY(id, parentId, name)
+                    VALUES (${item.id}, ${item.parentId}, "${item.name}")`)
+  })
+  await db.close()
+}
+
+f().then(r => console.log("finish"))
