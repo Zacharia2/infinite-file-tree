@@ -159,7 +159,7 @@ class EntryTree {
    */
   removeBranch(nid: number) {
     const needDelBranch = this.findNodeById(nid)
-    const queue: any[] = [...needDelBranch.parentNode.childNodes];
+    const queue: any[] = [needDelBranch, ...needDelBranch.childNodes];
     let i = 0;
     while (queue.length > 0) {
       const child = queue[i] as Element;
@@ -369,7 +369,7 @@ const flatTable: EntryLine[] = [
 let entryTree = new EntryTree();
 entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
 entryTree.toString();
-entryTree.removeBranch(3)
+entryTree.removeBranch(1)
 entryTree.toString();
 
 async function TestDB() {
