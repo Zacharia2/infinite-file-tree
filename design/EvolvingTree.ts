@@ -10,9 +10,12 @@
 
 // 在设计时路径Path不是必要条件
 
+// 对于编程来说，语义重要，语义大于某个语言件的构成情况，这就是所谓封装。
+// 只要了解某个语言件的语义，呢么他的逻辑构成, 它的更细微层级就不重要，就不需要放大。
+
 import xmlFormat from 'xml-formatter';
 import {Document, DOMParser, Element, NodeList, XMLSerializer} from '@xmldom/xmldom';
-import initSqlJs, {Database} from "sql.js";
+import initSqlJs, {Database, Statement} from "sql.js";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 import path from "path";
 
@@ -264,21 +267,18 @@ class EntryTree {
 }
 
 class DBService {
-  private dbFilePath: string;
-  private DB: Database;
+  private readonly dbFile: string;
+  private db: Database;
 
   constructor(dbPath: string) {
-    this.dbFilePath = path.resolve(dbPath);
+    this.dbFile = path.resolve(dbPath);
   }
 
   async read() {
-    // 如果DBPath下不存在db文件就创建一个新数据库，如果不为空就读取二进制数据库然后构建数据库
-    if (!existsSync(this.dbFilePath)) {
-      const SQL = await initSqlJs()
-      // Create a new database with our existing sample.sqlite file
-      this.DB = new SQL.Database();
-      // RUNNING SQL QUERIES 👇
-      this.DB.run(`create table ADJACENCY
+    const SQL = await initSqlJs()
+    if (!existsSync(this.dbFile)) {
+      this.db = new SQL.Database();
+      this.db.run(`create table ADJACENCY
                    (
                        id       TEXT not null
                            primary key,
@@ -291,21 +291,45 @@ class DBService {
                        depth    TEXT
                    );`);
     } else {
-      const SQL = await initSqlJs()
-      // Create a new database with our existing sample.sqlite file
-      const dbFileBuffer = readFileSync(this.dbFilePath);
-      this.DB = new SQL.Database(dbFileBuffer)
+      const dbFileBuffer = readFileSync(this.dbFile);
+      this.db = new SQL.Database(dbFileBuffer)
     }
   }
 
-  getDB(): Database {
-    return this.DB;
+  /**
+   * Returns the current Database instance, or null if not loaded.
+   */
+  getDB(): Database | null {
+    return this.db;
   }
 
-  async close() {
-    //   写出数据库二进制
-    writeFileSync(this.dbFilePath, this.DB.export());
-    this.dbFilePath = null;
+  runQuery(sql: string, params: any[] = []) {
+    if (!this.db) throw new Error("Database not loaded (local mode).");
+    let stmt: Statement | null = null;
+    try {
+      stmt = this.db.prepare(sql);
+      stmt.bind(params);
+      stmt.run();
+      writeFileSync(this.dbFile, this.db.export());
+    } finally {
+      if (stmt) stmt.free();
+    }
+  }
+
+  async getQuery<T extends Record<string, any>>(sql: string, params: any[] = []): Promise<T[]> {
+    if (!this.db) throw new Error("Database not loaded (local mode).");
+    let stmt: Statement | null = null;
+    try {
+      stmt = this.db.prepare(sql);
+      stmt.bind(params);
+      const results: T[] = [];
+      while (stmt.step()) {
+        results.push(stmt.getAsObject() as T);
+      }
+      return results;
+    } finally {
+      if (stmt) stmt.free();
+    }
   }
 }
 
@@ -330,15 +354,14 @@ entryTree.toString();
 entryTree.createChildOfNode(3, {name: '1 Child 1'})
 entryTree.toString();
 
-let db = new DBService("D:\\GitHub\\KCMS\\.obsidian\\plugins\\infinite-file-tree\\identifier.sqlite")
+let db = new DBService("../identifier.sqlite")
 
 async function f() {
   await db.read()
   flatTable.map((item) => {
-    db.getDB().run(`INSERT INTO ADJACENCY(id, parentId, name)
-                    VALUES (${item.id}, ${item.parentId}, "${item.name}")`)
+    db.runQuery(`INSERT INTO ADJACENCY(id, parentId, name)
+                 VALUES (${item.id}, ${item.parentId}, "${item.name}")`)
   })
-  await db.close()
 }
 
 f().then(r => console.log("finish"))
