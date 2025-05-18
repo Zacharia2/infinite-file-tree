@@ -49,6 +49,7 @@ class NidRegister {
   applyNid(): string {
     if (this.freeSet.size > 0) {
       let nid = [...this.freeSet.values()].sort((a, b) => (b - a)).pop()!
+      this.freeSet.delete(nid)
       this.registerSet.add(nid);
       return nid.toString();
     }
@@ -115,12 +116,13 @@ class EntryTree {
   createChildOfNode(nid: number, node: Entry) {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
-    node.id = this.nidRegister.applyNid()
+    const id = this.nidRegister.applyNid()
+    element.setAttribute("id", id);
     Object.keys(node).map((key) => {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).appendChild(element)
-    return Number(node.id)
+    return Number(id)
   }
 
   /**
@@ -131,12 +133,13 @@ class EntryTree {
   createSiblingOfNode(nid: number, node: Entry) {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
-    node.id = this.nidRegister.applyNid()
+    const id = this.nidRegister.applyNid()
+    element.setAttribute("id", id);
     Object.keys(node).map((key) => {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).parentNode.appendChild(element)
-    return Number(node.id)
+    return Number(id)
   }
 
   /**
@@ -372,7 +375,7 @@ let entryTree = new EntryTree();
 entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
 entryTree.toString();
 entryTree.removeBranch(1)
-entryTree.createChildOfNode(6, {name: "Child"})
+entryTree.createChildOfNode(entryTree.createChildOfNode(6, {name: "Child"}), {name: "Child"})
 entryTree.toString();
 
 async function TestDB() {
