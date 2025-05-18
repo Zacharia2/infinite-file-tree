@@ -36,46 +36,48 @@ interface EntryLine extends Entry {
 }
 
 class NidRegister {
-  private registerList = new Set<number>();
-  private freeList: number[] = [];
+  private freeSet = new Set<number>();
+  private registerSet = new Set<number>();
 
   constructor(table?: number[]) {
     if (!table) return
     table.forEach((value) => {
-      this.registerList.add(value);
+      this.registerSet.add(value);
     });
   }
 
   applyNid(): string {
-    if (this.freeList.length > 0) {
-      return String(this.freeList.pop()!);
+    if (this.freeSet.size > 0) {
+      let nid = [...this.freeSet.values()].sort((a, b) => (b - a)).pop()!
+      this.registerSet.add(nid);
+      return nid.toString();
     }
-    for (let i = 0; i < Number.MAX_VALUE; i++) {
-      if (!this.registerList.has(i)) {
-        this.registerList.add(i);
-        return String(i);
+    for (let nid = 0; nid < Number.MAX_VALUE; nid++) {
+      if (!this.registerSet.has(nid)) {
+        this.registerSet.add(nid);
+        return nid.toString();
       }
     }
     throw new Error("No available ID");
   }
 
   releaseNid(nid: number) {
-    this.registerList.delete(nid);
-    this.freeList.push(nid);
+    this.registerSet.delete(nid);
+    this.freeSet.add(nid);
   }
 
   copyNidFromTable(flatTable: Entry[]) {
     flatTable.map((entry) => {
-      this.registerList.add(Number(entry.id))
+      this.registerSet.add(Number(entry.id))
     })
   }
 
   toString() {
-    return "Nid: " + [...this.registerList.values()];
+    return "Nid: " + [...this.registerSet.values()];
   }
 
   toArray() {
-    return [...this.registerList.values()];
+    return [...this.registerSet.values()];
   }
 }
 
@@ -370,6 +372,7 @@ let entryTree = new EntryTree();
 entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
 entryTree.toString();
 entryTree.removeBranch(1)
+entryTree.createChildOfNode(6, {name: "Child"})
 entryTree.toString();
 
 async function TestDB() {
