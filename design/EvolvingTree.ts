@@ -14,7 +14,7 @@
 // 只要了解某个语言件的语义，呢么他的逻辑构成, 它的更细微层级就不重要，就不需要放大。
 
 import xmlFormat from 'xml-formatter';
-import {Document, DOMParser, Element, NodeList, XMLSerializer} from '@xmldom/xmldom';
+import {Document, DOMParser, Element, XMLSerializer} from '@xmldom/xmldom';
 import initSqlJs, {Database, Statement} from "sql.js";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 import path from "path";
@@ -62,6 +62,12 @@ class NidRegister {
   releaseNid(nid: number) {
     this.registerList.delete(nid);
     this.freeList.push(nid);
+  }
+
+  copyNidFromTable(flatTable: Entry[]) {
+    flatTable.map((entry) => {
+      this.registerList.add(Number(entry.id))
+    })
   }
 
   toString() {
@@ -133,16 +139,17 @@ class EntryTree {
 
   /**
    * 连接到父节点：删除指定条目，条目下所以子条目连接到父条目
-   * @param nid_target
+   * @param nid
    */
-  removeNode(nid_target: number) {
+  removeNode(nid: number) {
     // 必须知道删除什么位置的结点,以及怎么删除
     // 删除有清除文件只保留结点标题、连接到父节点、删除子元素三种方式
-    const target_node = this.doc.getElementById(nid_target.toString())
+    const target_node = this.doc.getElementById(nid.toString())
     for (const targetNodeElement of target_node.childNodes) {
       target_node.parentNode.appendChild(targetNodeElement.cloneNode(true))
     }
     target_node.parentNode.removeChild(target_node)
+    this.nidRegister.releaseNid(nid)
     return this
   }
 
@@ -152,6 +159,16 @@ class EntryTree {
    */
   removeBranch(nid: number) {
     const needDelBranch = this.findNodeById(nid)
+    const queue: any[] = [...needDelBranch.parentNode.childNodes];
+    let i = 0;
+    while (queue.length > 0) {
+      const child = queue[i] as Element;
+      this.nidRegister.releaseNid(Number(child.getAttribute("id")))
+      if (child.hasChildNodes()) {
+        queue.push(...child.childNodes)
+      }
+      queue.shift();
+    }
     needDelBranch.parentNode.removeChild(needDelBranch)
     return this
   }
@@ -162,16 +179,18 @@ class EntryTree {
     return this
   }
 
+  renameNote(nid: number, name: string) {
+    const needRenameNote = this.findNodeById(nid)
+    needRenameNote.setAttribute("name", name)
+  }
+
   /**
-   * 移动条目到目标条目下
-   * @param sourceNid
+   * 移动选定条目（及子条目，若有子条目）到目标条目下
+   * @param selectedNid
    * @param targetNid
    */
-  moveNode(sourceNid: number, targetNid: number) {
-    // 必须知道移动到什么位置
-    // 移动单个结点，移动一个分支，这个没差。统一视为一类
-    // 从某个位置移动到某个位置。
-    const source_node = this.findNodeById(sourceNid)
+  moveNode(selectedNid: number, targetNid: number) {
+    const source_node = this.findNodeById(selectedNid)
     const target_node = this.findNodeById(targetNid)
     target_node.appendChild(source_node.cloneNode(true))
     source_node.setAttribute("parentId", targetNid.toString())
@@ -198,29 +217,31 @@ class EntryTree {
    */
   toTable() {
     let table: EntryLine[] = []
-
-    function buildTable(children: NodeList) {
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i] as Element
-        const entryLine: EntryLine = {id: '', parentId: '', name: ''}
-        const parentNode = child.parentNode as Element;
-        const parentId = parentNode.getAttribute("id");
-        if (parentId === "tree") {
-          entryLine["parentId"] = null
-        } else {
-          entryLine["parentId"] = parentId
-        }
-        for (let i = 0; i < child.attributes.length; i++) {
-          entryLine[child.attributes[i].name] = child.attributes[i].value;
-        }
-        table.push(entryLine);
-        if (child.hasChildNodes()) {
-          buildTable(child.childNodes)
-        }
+    const queue: any[] = [...this.root.childNodes];
+    // <-A-X-X-X-B-，循环队列直到队列为0.
+    // 消耗队列前端，加入队列后端。
+    // 之所以能够层层深入是因为推入子元素到队列中了。
+    // 子元素依然会在自己的循环中将子元素的子元素推入队列。
+    let i = 0;
+    while (queue.length > 0) {
+      const child = queue[i]
+      const entryLine: EntryLine = {id: '', parentId: '', name: ''}
+      const parentNode = child.parentNode as Element;
+      const parentId = parentNode.getAttribute("id");
+      if (parentId === "tree") {
+        entryLine["parentId"] = null
+      } else {
+        entryLine["parentId"] = parentId
       }
+      for (let i = 0; i < child.attributes.length; i++) {
+        entryLine[child.attributes[i].name] = child.attributes[i].value;
+      }
+      table.push(entryLine);
+      if (child.hasChildNodes()) {
+        queue.push(...child.childNodes)
+      }
+      queue.shift()
     }
-
-    buildTable(this.root.childNodes)
     return table
   }
 
@@ -257,12 +278,13 @@ class EntryTree {
       .map(rootNode => {
         this.root.appendChild(buildTree(entryMap.get(rootNode.id)))
       });
+    this.nidRegister.copyNidFromTable(flatTable);
     return this
   }
 
   toString() {
-    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)))
     console.log(`NidTable: ${this.nidRegister.toArray()}`)
+    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)) + "\n")
   }
 }
 
@@ -345,16 +367,12 @@ const flatTable: EntryLine[] = [
 
 
 let entryTree = new EntryTree();
-entryTree.setNidRegister(new NidRegister([1, 2, 3, 4, 5]))
-entryTree.fromTable(flatTable)
-let table = entryTree.toTable()
-entryTree.fromTable(table)
-entryTree.moveNode(3, 6)
+entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
 entryTree.toString();
-entryTree.createChildOfNode(3, {name: '1 Child 1'})
+entryTree.removeBranch(3)
 entryTree.toString();
 
-async function f() {
+async function TestDB() {
   const db = new DBService("./sqlite.db")
   await db.read()
   flatTable.map((item) => {
@@ -363,4 +381,4 @@ async function f() {
   })
 }
 
-f().then(r => console.log("finish"))
+// TestDB().then(r => console.log("finish"))
