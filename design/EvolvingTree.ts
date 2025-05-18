@@ -120,7 +120,7 @@ class EntryTree {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).appendChild(element)
-    return this
+    return Number(node.id)
   }
 
   /**
@@ -136,7 +136,7 @@ class EntryTree {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).parentNode.appendChild(element)
-    return this
+    return Number(node.id)
   }
 
   /**
