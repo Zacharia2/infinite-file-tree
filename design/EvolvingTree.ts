@@ -354,9 +354,8 @@ entryTree.toString();
 entryTree.createChildOfNode(3, {name: '1 Child 1'})
 entryTree.toString();
 
-let db = new DBService("../identifier.sqlite")
-
 async function f() {
+  const db = new DBService("./sqlite.db")
   await db.read()
   flatTable.map((item) => {
     db.runQuery(`INSERT INTO ADJACENCY(id, parentId, name)
