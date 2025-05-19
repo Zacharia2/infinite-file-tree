@@ -423,9 +423,8 @@ const flatTable: EntryLine[] = [
 
 let entryTree = new EntryTree();
 entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
+entryTree.createChildOfNode(entryTree.createChildOfNode(1, {name: "Child"}), {name: "Child"})
 entryTree.toString();
-entryTree.removeBranch(1)
-entryTree.createChildOfNode(entryTree.createChildOfNode(6, {name: "Child"}), {name: "Child"})
 entryTree.sortBranch(1)
 entryTree.toString();
 
