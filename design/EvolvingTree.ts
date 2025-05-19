@@ -117,7 +117,8 @@ class EntryTree {
     while (queue.length > 0) {
       // const child = queue[i] as Element;
       const {child, depth} = queue[i] as { child: Element; depth: number };
-      action(child, depth);
+      let isStop: boolean = action(child, depth) || false;
+      if (isStop) return
       if (child.hasChildNodes()) {
         // queue.push(...child.childNodes)
         queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
@@ -153,6 +154,7 @@ class EntryTree {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).appendChild(element)
+    element.setAttribute("depth", this.getDepthOfNode(Number(id)).toString());
     return Number(id)
   }
 
@@ -170,6 +172,7 @@ class EntryTree {
       element.setAttribute(key, node[key]);
     })
     this.findNodeById(nid).parentNode.appendChild(element)
+    element.setAttribute("depth", this.getDepthOfNode(Number(id)).toString());
     return Number(id)
   }
 
@@ -269,6 +272,18 @@ class EntryTree {
       }
     })
 
+  }
+
+  getDepthOfNode(nid: number) {
+    const node = this.findNodeById(nid)
+    let number: { depth: number } = {depth: null}
+    EntryTree.forEachChildTreeQueue([...this.getRoot().childNodes], (child: Element, depth: number) => {
+      if (node.getAttribute("id") == child.getAttribute("id")) {
+        number.depth = depth
+        return true
+      }
+    })
+    return number.depth
   }
 
   findNodeById(nid: number): Element {
@@ -435,4 +450,5 @@ async function TestDB() {
   })
 }
 
+// entryTree只用于表示树形结构和排序只需要ID name，而数据用DB查询，是否可以
 // TestDB().then(r => console.log("finish"))
