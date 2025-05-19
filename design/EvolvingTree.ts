@@ -10,6 +10,8 @@
 
 // 在设计时路径Path不是必要条件
 
+// mergeNode() 必须知道什么和什么合并，将某元素合并到某元素，可以用类方法执行。
+
 // 对于编程来说，语义重要，语义是最核心的东西，语义大于某个语言件的构成情况，这就是所谓封装。
 // 只要了解某个语言件的语义，呢么他的逻辑构成, 它的更细微层级就不重要，就不需要放大。
 // 函数 类 模块 包，每个层次或每个层次的单体的意义就是用更小层次的单位构建当前层次的语义。
@@ -65,22 +67,22 @@ class NidRegister {
     throw new Error("No available ID");
   }
 
-  releaseNid(nid: number) {
+  releaseNid(nid: number): void {
     this.registerSet.delete(nid);
     this.freeSet.add(nid);
   }
 
-  copyNidFromTable(flatTable: Entry[]) {
+  copyNidFromTable(flatTable: Entry[]): void {
     flatTable.map((entry) => {
       this.registerSet.add(Number(entry.id))
     })
   }
 
-  toString() {
+  toString(): string {
     return "Nid: " + [...this.registerSet.values()];
   }
 
-  toArray() {
+  toArray(): number[] {
     return [...this.registerSet.values()];
   }
 }
@@ -108,7 +110,7 @@ class EntryTree {
    * @param action 对每个元素进行的操作
    * @private
    */
-  private static forEachChildTreeQueue(array: any[], action: Function) {
+  private static forEachChildTreeQueue(array: any[], action: Function): void {
     // const queue: any[] = [...array];
     const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
     let i = 0;
@@ -129,11 +131,11 @@ class EntryTree {
     return this
   }
 
-  getRoot() {
+  getRoot(): Element {
     return this.root;
   }
 
-  getDocument() {
+  getDocument(): Document {
     return this.doc
   }
 
@@ -142,7 +144,7 @@ class EntryTree {
    * @param nid 指定的条目位置
    * @param node 需要创建的条目
    */
-  createChildOfNode(nid: number, node: Entry) {
+  createChildOfNode(nid: number, node: Entry): number {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
     const id = this.nidRegister.applyNid()
@@ -159,7 +161,7 @@ class EntryTree {
    * @param nid 指定的条目位置
    * @param node 需要创建的条目
    */
-  createSiblingOfNode(nid: number, node: Entry) {
+  createSiblingOfNode(nid: number, node: Entry): number {
     // 必须知道插入或者新建到什么位置
     const element = this.doc.createElement("node")
     const id = this.nidRegister.applyNid()
@@ -206,7 +208,7 @@ class EntryTree {
     return this
   }
 
-  renameNote(nid: number, name: string) {
+  renameNote(nid: number, name: string): void {
     const needRenameNote = this.findNodeById(nid)
     needRenameNote.setAttribute("name", name)
   }
@@ -225,14 +227,10 @@ class EntryTree {
     return this
   }
 
-  mergeNode() {
-    // 必须知道什么和什么合并
-  }
-
   /**
    * 排序是按name根据不同方式，支持中英数字，中文使用首字母，选择分支排序。
    */
-  sortBranch(branchNid: number) {
+  sortBranch(branchNid: number): void {
     // 取name前9个字符，对每个字符进行标准化，然后进行排序。
     // 对子元素进行克隆，对克隆后的元素进行排序。
     // 先克隆子元素，然后清空子元素，然后排序克隆的子元素。
@@ -258,7 +256,7 @@ class EntryTree {
         }).map((value) => value.slice(0, 1))
         let name9 = Math.min(aName.length, bName.length)
         if (name9 > 9) name9 = 9
-        for (let i = 0; i <= name9; i++) {
+        for (let i = 0; i < name9; i++) {
           const aChar = aName[i]
           const bChar = bName[i]
           if (aChar === bChar) continue;
@@ -273,14 +271,14 @@ class EntryTree {
 
   }
 
-  findNodeById(nid: number) {
+  findNodeById(nid: number): Element {
     return this.doc.getElementById(nid.toString())
   }
 
   /**
    * 树变成表,然后存储
    */
-  toTable() {
+  toEntryArray(): EntryLine[] {
     let table: EntryLine[] = []
     EntryTree.forEachChildTreeQueue([...this.root.childNodes], (child: Element, depth: number) => {
       const entryLine: EntryLine = {id: '', parentId: '', name: ''}
@@ -422,7 +420,7 @@ const flatTable: EntryLine[] = [
 
 
 let entryTree = new EntryTree();
-entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
+entryTree.fromTable(entryTree.fromTable(flatTable).toEntryArray())
 entryTree.createChildOfNode(entryTree.createChildOfNode(1, {name: "Child"}), {name: "Child"})
 entryTree.toString();
 entryTree.sortBranch(1)
