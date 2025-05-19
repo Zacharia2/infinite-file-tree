@@ -286,6 +286,22 @@ class EntryTree {
     return number.depth
   }
 
+  /**
+   * 从笔记属性更新条目字段。
+   * 从ob中读取属性，转换为json对象，然后序列化json，最后更新field字段
+   * @param nid 条目id
+   * @param attr 笔记属性对象
+   */
+  updateNodeField(nid: number, attr: object) {
+    const node = this.findNodeById(nid)
+    if (node.hasAttribute("note")) {
+      const notePath = node.getAttribute("note")
+      if (existsSync(notePath)) {
+        node.setAttribute("field", JSON.stringify(attr))
+      }
+    }
+  }
+
   findNodeById(nid: number): Element {
     return this.doc.getElementById(nid.toString())
   }
@@ -440,6 +456,7 @@ entryTree.createChildOfNode(entryTree.createChildOfNode(1, {name: "Child"}), {na
 entryTree.toString();
 entryTree.sortBranch(1)
 entryTree.toString();
+console.log(entryTree.getDepthOfNode(5))
 
 async function TestDB() {
   const db = new DBService("./sqlite.db")
