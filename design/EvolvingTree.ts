@@ -20,6 +20,7 @@ import {Document, DOMParser, Element, XMLSerializer} from '@xmldom/xmldom';
 import initSqlJs, {Database, Statement} from "sql.js";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 import path from "path";
+import {pinyin} from "pinyin-pro";
 
 interface Entry {
   id?: string; //条目ID
@@ -97,6 +98,32 @@ class EntryTree {
     this.nidRegister = new NidRegister()
   }
 
+  /**
+   * 遍历子树队列。
+   *     // <-A-X-X-X-B-，循环队列直到队列为0.
+   *     // 消耗队列前端，加入队列后端。
+   *     // 之所以能够层层深入是因为推入子元素到队列中了。
+   *     // 子元素依然会在自己的循环中将子元素的子元素推入队列。
+   * @param array 子树列表
+   * @param action 对每个元素进行的操作
+   * @private
+   */
+  private static forEachChildTreeQueue(array: any[], action: Function) {
+    // const queue: any[] = [...array];
+    const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
+    let i = 0;
+    while (queue.length > 0) {
+      // const child = queue[i] as Element;
+      const {child, depth} = queue[i] as { child: Element; depth: number };
+      action(child, depth);
+      if (child.hasChildNodes()) {
+        // queue.push(...child.childNodes)
+        queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
+      }
+      queue.shift();
+    }
+  }
+
   setNidRegister(nidRegister: NidRegister) {
     this.nidRegister = nidRegister
     return this
@@ -166,16 +193,9 @@ class EntryTree {
    */
   removeBranch(nid: number) {
     const needDelBranch = this.findNodeById(nid)
-    const queue: any[] = [needDelBranch, ...needDelBranch.childNodes];
-    let i = 0;
-    while (queue.length > 0) {
-      const child = queue[i] as Element;
+    EntryTree.forEachChildTreeQueue([needDelBranch, ...needDelBranch.childNodes], (child: Element) => {
       this.nidRegister.releaseNid(Number(child.getAttribute("id")))
-      if (child.hasChildNodes()) {
-        queue.push(...child.childNodes)
-      }
-      queue.shift();
-    }
+    })
     needDelBranch.parentNode.removeChild(needDelBranch)
     return this
   }
@@ -212,7 +232,45 @@ class EntryTree {
   /**
    * 排序是按name根据不同方式，支持中英数字，中文使用首字母，选择分支排序。
    */
-  sortNode(branchNid: number) {
+  sortBranch(branchNid: number) {
+    // 取name前9个字符，对每个字符进行标准化，然后进行排序。
+    // 对子元素进行克隆，对克隆后的元素进行排序。
+    // 先克隆子元素，然后清空子元素，然后排序克隆的子元素。
+    const needSortBranchNode = this.findNodeById(branchNid)
+    EntryTree.forEachChildTreeQueue([needSortBranchNode], (needSortBranchNode: Element) => {
+      // 克隆选定分支的子元素并映射为列表
+      const needSortedClonedNode = [...needSortBranchNode.childNodes].map((value: Element) => value.cloneNode(true) as Element);
+      // 清空选定分支的子元素
+      [...needSortBranchNode.childNodes].forEach((value: Element) => needSortBranchNode.removeChild(value));
+      // 对元素从小到大进行排序
+      needSortedClonedNode.sort(function (a, b) {
+        // 如果相同就返回0
+        if (a.getAttribute("name") == b.getAttribute("name")) return 0
+        // 如果不同就取两个元素name最小长度的前九个字符
+        // 然后两两按照从小到大进行排列
+        const aName = pinyin(a.getAttribute("name"), {
+          toneType: "none",
+          type: "array"
+        }).map((value) => value.slice(0, 1))
+        const bName = pinyin(b.getAttribute("name"), {
+          toneType: "none",
+          type: "array"
+        }).map((value) => value.slice(0, 1))
+        let name9 = Math.min(aName.length, bName.length)
+        if (name9 > 9) name9 = 9
+        for (let i = 0; i <= name9; i++) {
+          const aChar = aName[i]
+          const bChar = bName[i]
+          if (aChar === bChar) continue;
+          else return aChar > bChar ? -1 : 1
+        }
+      });
+      // 排序好的再依次填充回去
+      for (let i = 0; i < needSortedClonedNode.length; ++i) {
+        needSortBranchNode.appendChild(needSortedClonedNode[i]);
+      }
+    })
+
   }
 
   findNodeById(nid: number) {
@@ -224,14 +282,7 @@ class EntryTree {
    */
   toTable() {
     let table: EntryLine[] = []
-    const queue: any[] = [...this.root.childNodes];
-    // <-A-X-X-X-B-，循环队列直到队列为0.
-    // 消耗队列前端，加入队列后端。
-    // 之所以能够层层深入是因为推入子元素到队列中了。
-    // 子元素依然会在自己的循环中将子元素的子元素推入队列。
-    let i = 0;
-    while (queue.length > 0) {
-      const child = queue[i]
+    EntryTree.forEachChildTreeQueue([...this.root.childNodes], (child: Element, depth: number) => {
       const entryLine: EntryLine = {id: '', parentId: '', name: ''}
       const parentNode = child.parentNode as Element;
       const parentId = parentNode.getAttribute("id");
@@ -240,15 +291,12 @@ class EntryTree {
       } else {
         entryLine["parentId"] = parentId
       }
+      entryLine["depth"] = String(depth)
       for (let i = 0; i < child.attributes.length; i++) {
         entryLine[child.attributes[i].name] = child.attributes[i].value;
       }
       table.push(entryLine);
-      if (child.hasChildNodes()) {
-        queue.push(...child.childNodes)
-      }
-      queue.shift()
-    }
+    })
     return table
   }
 
@@ -378,6 +426,7 @@ entryTree.fromTable(entryTree.fromTable(flatTable).toTable())
 entryTree.toString();
 entryTree.removeBranch(1)
 entryTree.createChildOfNode(entryTree.createChildOfNode(6, {name: "Child"}), {name: "Child"})
+entryTree.sortBranch(1)
 entryTree.toString();
 
 async function TestDB() {
