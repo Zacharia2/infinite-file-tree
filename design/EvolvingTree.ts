@@ -37,7 +37,7 @@ interface Entry {
 interface EntryLine extends Entry {
   id: string; //条目ID
   depth?: string; //条目所在位置深度
-  parentId: string; //条目所在父条目ID
+  sequence?: string; //条目树的顺序
 }
 
 class NidRegister {
@@ -88,11 +88,12 @@ class NidRegister {
 }
 
 class EntryTree {
-  private doc: Document;
-  private root: Element;
+  private readonly doc: Document;
+  private readonly root: Element;
   private readonly dom: DOMParser = new DOMParser();
   private readonly empty_xml = `<itree id="tree"></itree>`
   private nidRegister: NidRegister;
+  private dbService: DBService;
 
   constructor() {
     this.doc = this.dom.parseFromString(this.empty_xml, "text/xml");
@@ -100,36 +101,31 @@ class EntryTree {
     this.nidRegister = new NidRegister()
   }
 
-  /**
-   * 遍历子树队列。
-   *     // <-A-X-X-X-B-，循环队列直到队列为0.
-   *     // 消耗队列前端，加入队列后端。
-   *     // 之所以能够层层深入是因为推入子元素到队列中了。
-   *     // 子元素依然会在自己的循环中将子元素的子元素推入队列。
-   * @param array 子树列表
-   * @param action 对每个元素进行的操作
-   * @private
-   */
-  private static forEachChildTreeQueue(array: any[], action: Function): void {
-    // const queue: any[] = [...array];
+  static visitor(array: any[], action: Function) {
     const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
-    let i = 0;
     while (queue.length > 0) {
-      // const child = queue[i] as Element;
-      const {child, depth} = queue[i] as { child: Element; depth: number };
+      const {child, depth} = queue.shift() as { child: Element; depth: number };
       let isStop: boolean = action(child, depth) || false;
       if (isStop) return
       if (child.hasChildNodes()) {
-        // queue.push(...child.childNodes)
         queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
       }
-      queue.shift();
     }
   }
 
   setNidRegister(nidRegister: NidRegister) {
     this.nidRegister = nidRegister
     return this
+  }
+
+  /**
+   * 准备db服务，用于后面的数据变更。
+   * 本结构采用树表分离的方式，共同建构虚拟生长树。其中树表示层级，表表示结点全部信息。
+   * @param dbPath
+   */
+  async prepareDataBase(dbPath: string) {
+    this.dbService = new DBService();
+    await this.dbService.read(dbPath)
   }
 
   getRoot(): Element {
@@ -143,77 +139,92 @@ class EntryTree {
   /**
    * 在某个条目下面创建条目
    * @param nid 指定的条目位置
-   * @param node 需要创建的条目
+   * @param entry 需要创建的条目
    */
-  createChildOfNode(nid: number, node: Entry): number {
-    // 必须知道插入或者新建到什么位置
-    const element = this.doc.createElement("node")
+  async createChildNode(nid: number, entry: Entry): Promise<number> {
     const id = this.nidRegister.applyNid()
-    element.setAttribute("id", id);
-    Object.keys(node).map((key) => {
-      element.setAttribute(key, node[key]);
-    })
-    this.findNodeById(nid).appendChild(element)
-    element.setAttribute("depth", this.getDepthOfNode(Number(id)).toString());
+    const node = this.doc.createElement("node")
+    node.setAttribute("id", id);
+    node.setAttribute("name", entry.name);
+    this.findNodeElementById(nid).appendChild(node)
+    const entryLine: EntryLine = {
+      id: id.toString(),
+      parentId: nid.toString(),
+      name: entry.name,
+      depth: (await this.getDepthOfNode(Number(id))).toString()
+    }
+    await this.insertNodeIntoDB(entryLine)
     return Number(id)
   }
 
   /**
    * 创建条目的兄弟条目
    * @param nid 指定的条目位置
-   * @param node 需要创建的条目
+   * @param entry 需要创建的条目
    */
-  createSiblingOfNode(nid: number, node: Entry): number {
-    // 必须知道插入或者新建到什么位置
-    const element = this.doc.createElement("node")
-    const id = this.nidRegister.applyNid()
-    element.setAttribute("id", id);
-    Object.keys(node).map((key) => {
-      element.setAttribute(key, node[key]);
-    })
-    this.findNodeById(nid).parentNode.appendChild(element)
-    element.setAttribute("depth", this.getDepthOfNode(Number(id)).toString());
-    return Number(id)
+  async createSiblingNode(nid: number, entry: Entry): Promise<number> {
+    const id = this.nidRegister.applyNid();
+    const parentNode = this.findNodeElementById(nid).parentNode as Element;
+    const node = this.doc.createElement("node");
+    node.setAttribute("id", id);
+    node.setAttribute("name", entry.name);
+    parentNode.appendChild(node);
+    const entryLine: EntryLine = {
+      id: id.toString(),
+      parentId: parentNode.getAttribute("id"),
+      name: entry.name,
+      depth: (await this.getDepthOfNode(Number(id))).toString()
+    }
+    await this.insertNodeIntoDB(entryLine);
+    return Number(id);
   }
 
   /**
    * 连接到父节点：删除指定条目，条目下所以子条目连接到父条目
    * @param nid
    */
-  removeNode(nid: number) {
-    // 必须知道删除什么位置的结点,以及怎么删除
-    // 删除有清除文件只保留结点标题、连接到父节点、删除子元素三种方式
-    const target_node = this.doc.getElementById(nid.toString())
-    for (const targetNodeElement of target_node.childNodes) {
-      target_node.parentNode.appendChild(targetNodeElement.cloneNode(true))
+  async removeNode(nid: number) {
+    const needRemoveNode = this.doc.getElementById(nid.toString())
+    for (const childNode of needRemoveNode.childNodes) {
+      needRemoveNode.parentNode.appendChild(childNode.cloneNode(true))
     }
-    target_node.parentNode.removeChild(target_node)
+    needRemoveNode.parentNode.removeChild(needRemoveNode)
     this.nidRegister.releaseNid(nid)
-    return this
+    await this.deleteNodeIntoDB(nid)
   }
 
   /**
    * 删除分支，包含此条目以及此条目下所有子条目
    * @param nid
    */
-  removeBranch(nid: number) {
-    const needDelBranch = this.findNodeById(nid)
-    EntryTree.forEachChildTreeQueue([needDelBranch, ...needDelBranch.childNodes], (child: Element) => {
-      this.nidRegister.releaseNid(Number(child.getAttribute("id")))
+  async removeBranch(nid: number) {
+    const needRemoveBranch = this.findNodeElementById(nid)
+    await this.forEachChildTreeQueue([needRemoveBranch, ...needRemoveBranch.childNodes], async (child: Element) => {
+      const id = Number(child.getAttribute("id"))
+      this.nidRegister.releaseNid(id)
+      await this.deleteNodeIntoDB(id)
     })
-    needDelBranch.parentNode.removeChild(needDelBranch)
-    return this
+    needRemoveBranch.parentNode.removeChild(needRemoveBranch)
   }
 
-  removeNote(nid: number) {
-    const needDelNodeOfNote = this.findNodeById(nid)
+  async removeNote(nid: number) {
+    const needDelNodeOfNote = this.findNodeElementById(nid)
     needDelNodeOfNote.setAttribute("note", null)
-    return this
+    const entryLine: EntryLine = {
+      id: nid.toString(),
+      name: null,
+    }
+    await this.updateNodeIntoDB(entryLine)
   }
 
-  renameNote(nid: number, name: string): void {
-    const needRenameNote = this.findNodeById(nid)
+  async renameNote(nid: number, name: string): Promise<void> {
+    const needRenameNote = this.findNodeElementById(nid)
     needRenameNote.setAttribute("name", name)
+    const entryLine: EntryLine = {
+      id: nid.toString(),
+      name: name,
+    }
+    await this.updateNodeIntoDB(entryLine)
   }
 
   /**
@@ -221,24 +232,29 @@ class EntryTree {
    * @param selectedNid
    * @param targetNid
    */
-  moveNode(selectedNid: number, targetNid: number) {
-    const source_node = this.findNodeById(selectedNid)
-    const target_node = this.findNodeById(targetNid)
+  async moveNode(selectedNid: number, targetNid: number) {
+    const source_node = this.findNodeElementById(selectedNid)
+    const target_node = this.findNodeElementById(targetNid)
     target_node.appendChild(source_node.cloneNode(true))
-    source_node.setAttribute("parentId", targetNid.toString())
     source_node.parentNode.removeChild(source_node)
-    return this
+    const entryLine: EntryLine = {
+      id: selectedNid.toString(),
+      name: source_node.getAttribute("name"),
+      parentId: targetNid.toString(),
+    }
+    await this.updateNodeIntoDB(entryLine)
   }
 
   /**
    * 排序是按name根据不同方式，支持中英数字，中文使用首字母，选择分支排序。
+   * 用一个配置文件存储排序方式好了。载入的时候按配置文件排序。
    */
-  sortBranch(branchNid: number): void {
+  async sortBranch(branchNid: number): Promise<void> {
     // 取name前9个字符，对每个字符进行标准化，然后进行排序。
     // 对子元素进行克隆，对克隆后的元素进行排序。
     // 先克隆子元素，然后清空子元素，然后排序克隆的子元素。
-    const needSortBranchNode = this.findNodeById(branchNid)
-    EntryTree.forEachChildTreeQueue([needSortBranchNode], (needSortBranchNode: Element) => {
+    const needSortBranchNode = this.findNodeElementById(branchNid)
+    await this.forEachChildTreeQueue([needSortBranchNode], (needSortBranchNode: Element) => {
       // 克隆选定分支的子元素并映射为列表
       const needSortedClonedNode = [...needSortBranchNode.childNodes].map((value: Element) => value.cloneNode(true) as Element);
       // 清空选定分支的子元素
@@ -246,14 +262,16 @@ class EntryTree {
       // 对元素从小到大进行排序
       needSortedClonedNode.sort(function (a, b) {
         // 如果相同就返回0
-        if (a.getAttribute("name") == b.getAttribute("name")) return 0
+        const aNodeName = a.getAttribute("name")
+        const bNodeName = b.getAttribute("name")
+        if (aNodeName == bNodeName) return 0
         // 如果不同就取两个元素name最小长度的前九个字符
         // 然后两两按照从小到大进行排列
-        const aName = pinyin(a.getAttribute("name"), {
+        const aName = pinyin(aNodeName, {
           toneType: "none",
           type: "array"
         }).map((value) => value.slice(0, 1))
-        const bName = pinyin(b.getAttribute("name"), {
+        const bName = pinyin(bNodeName, {
           toneType: "none",
           type: "array"
         }).map((value) => value.slice(0, 1))
@@ -271,13 +289,14 @@ class EntryTree {
         needSortBranchNode.appendChild(needSortedClonedNode[i]);
       }
     })
-
+    await this.refreshEntryTableOrder()
   }
 
-  getDepthOfNode(nid: number) {
-    const node = this.findNodeById(nid)
+  // 不需要暴露，只需要查表
+  async getDepthOfNode(nid: number) {
+    const node = this.findNodeElementById(nid)
     let number: { depth: number } = {depth: null}
-    EntryTree.forEachChildTreeQueue([...this.getRoot().childNodes], (child: Element, depth: number) => {
+    await this.forEachChildTreeQueue([...this.root.childNodes], (child: Element, depth: number) => {
       if (node.getAttribute("id") == child.getAttribute("id")) {
         number.depth = depth
         return true
@@ -286,64 +305,97 @@ class EntryTree {
     return number.depth
   }
 
+  async getNodeAttributeInDB(nid: number, name?: string) {
+    if (name) {
+      const sql = `SELECT '${name}'
+                   FROM ADJACENCY
+                   WHERE id = '${nid}';`
+      return Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+    } else {
+      const sql = `SELECT *
+                   FROM ADJACENCY
+                   WHERE id = '${nid}';`
+      return Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+    }
+  }
+
   /**
    * 从笔记属性更新条目字段。
    * 从ob中读取属性，转换为json对象，然后序列化json，最后更新field字段
    * @param nid 条目id
    * @param attr 笔记属性对象
    */
-  updateNodeField(nid: number, attr: object) {
-    const node = this.findNodeById(nid)
+  async updateNodeField(nid: number, attr: object) {
+    const node = this.findNodeElementById(nid)
     if (node.hasAttribute("note")) {
       const notePath = node.getAttribute("note")
       if (existsSync(notePath)) {
-        node.setAttribute("field", JSON.stringify(attr))
+        const entryLine: EntryLine = {
+          id: nid.toString(),
+          name: node.getAttribute("name"),
+          field: JSON.stringify(attr)
+        }
+        await this.updateNodeIntoDB(entryLine)
       }
     }
   }
 
-  findNodeById(nid: number): Element {
+  findNodeElementById(nid: number): Element {
     return this.doc.getElementById(nid.toString())
   }
 
-  /**
-   * 树变成表,然后存储
-   */
-  toEntryArray(): EntryLine[] {
-    let table: EntryLine[] = []
-    EntryTree.forEachChildTreeQueue([...this.root.childNodes], (child: Element, depth: number) => {
-      const entryLine: EntryLine = {id: '', parentId: '', name: ''}
-      const parentNode = child.parentNode as Element;
-      const parentId = parentNode.getAttribute("id");
-      if (parentId === "tree") {
-        entryLine["parentId"] = null
-      } else {
-        entryLine["parentId"] = parentId
-      }
-      entryLine["depth"] = String(depth)
-      for (let i = 0; i < child.attributes.length; i++) {
-        entryLine[child.attributes[i].name] = child.attributes[i].value;
-      }
-      table.push(entryLine);
-    })
-    return table
+  toString() {
+    console.log(`NidTable: ${this.nidRegister.toArray()}`)
+    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)) + "\n")
   }
 
   /**
-   * // 表变成树，然后使用
+   * 将数据库导出为EntryArray
+   */
+  async toEntryArray(): Promise<EntryLine[]> {
+    const sql = `SELECT *
+                 FROM ADJACENCY;`
+    return Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+  }
+
+  async refreshEntryTableOrder() {
+    //   这个负责更新数据库中条目的顺序列的值，依据是DOM树中的顺序。
+    //   @buildTreeFromDatabase()配合按order顺序读取。
+    let order: number = 1
+    await this.forEachChildTreeQueue([...this.root.childNodes], async (child: Element) => {
+      const entryLine: EntryLine = {
+        id: child.getAttribute("id"),
+        name: child.getAttribute("name"),
+        sequence: order.toString(),
+      }
+      await this.updateNodeIntoDB(entryLine)
+      order++
+    })
+  }
+
+  async refreshEntryTableDepth() {
+    await this.forEachChildTreeQueue([...this.root.childNodes], async (child: Element) => {
+      const entryLine: EntryLine = {
+        id: child.getAttribute("id"),
+        name: child.getAttribute("name"),
+        depth: (await this.getDepthOfNode(Number(child.getAttribute("id")))).toString(),
+      }
+      await this.updateNodeIntoDB(entryLine)
+    })
+  }
+
+  /**
+   * 使EntryArray表变成稀疏DOM树并将完整数据条目到数据库
    * @param flatTable
    */
-  fromTable(flatTable: Entry[]) {
+  fromEntryArrayBuildTree(flatTable: EntryLine[]) {
     const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
-    this.doc = this.dom.parseFromString(this.empty_xml, "text/xml")
-    this.root = this.doc.getElementById("tree")
-    flatTable.map(line => {
+    flatTable.map(async line => {
       const entry = this.doc.createElement("node")
-      Object.keys(line).map((key) => {
-        if (key === "parentId") return
-        entry.setAttribute(key, line[key]);
-      })
+      entry.setAttribute("id", line.id);
+      entry.setAttribute("name", line.name);
       entryMap.set(line.id, entry);
+      await this.insertNodeIntoDB(line)
     })
 
     // 定义一个递归函数，用于构建每个节点的子树
@@ -358,7 +410,7 @@ class EntryTree {
     }
 
     flatTable
-      .filter(item => item.parentId === null)
+      .filter(item => item.parentId === null || item.parentId === "null")
       .map(rootNode => {
         this.root.appendChild(buildTree(entryMap.get(rootNode.id)))
       });
@@ -366,22 +418,111 @@ class EntryTree {
     return this
   }
 
-  toString() {
-    console.log(`NidTable: ${this.nidRegister.toArray()}`)
-    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)) + "\n")
+  /**
+   * 从数据库中读取数据，仅使用id、name列用于构建和排序树。
+   */
+  async fromDatabaseBuildTree() {
+    const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
+    const sql = `SELECT id, parentId, name
+                 FROM ADJACENCY
+                 ORDER BY sequence;`
+    let flatTable = Array.from(await this.dbService.getQuery(sql)).map(line => line as Entry)
+    flatTable.map(line => {
+      const entry = this.doc.createElement("node")
+      entry.setAttribute("id", line.id);
+      entry.setAttribute("name", line.name);
+      entryMap.set(line.id, entry);
+    })
+
+    flatTable
+      .filter(item => item.parentId === null || item.parentId === "null")
+      .map(rootNode => {
+        const queue: any[] = [entryMap.get(rootNode.id)]
+        while (queue.length > 0) {
+          const entry = queue.shift() as Element;
+          flatTable.forEach(line => {
+            if (line.parentId === entry.getAttribute("id")) {
+              const entryNode = entryMap.get(line.id)
+              entry.appendChild(entryNode);
+              queue.push(entryNode);
+            }
+          })
+        }
+        this.root.appendChild(entryMap.get(rootNode.id))
+      });
+    this.nidRegister.copyNidFromTable(flatTable);
+    return this
+  }
+
+  /**
+   * 遍历子树队列。
+   *     // <-A-X-X-X-B-，循环队列直到队列为0.
+   *     // 消耗队列前端，加入队列后端。
+   *     // 之所以能够层层深入是因为推入子元素到队列中了。
+   *     // 子元素依然会在自己的循环中将子元素的子元素推入队列。
+   * @param array 子树列表
+   * @param action 对每个元素进行的操作
+   * @private
+   */
+  private async forEachChildTreeQueue(array: any[], action: Function): Promise<void> {
+    // const queue: any[] = [...array];
+    const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
+    while (queue.length > 0) {
+      // const child = queue[i] as Element;
+      const {child, depth} = queue.shift() as { child: Element; depth: number };
+      let isStop: boolean = await action(child, depth) || false;
+      if (isStop) return
+      if (child.hasChildNodes()) {
+        // queue.push(...child.childNodes)
+        queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
+      }
+    }
+  }
+
+  private async updateNodeIntoDB(entryLine: EntryLine) {
+    const compileSqlTupleArray = Object.keys(entryLine).map((key) => [key, entryLine[key]] as [key: string, value: string])
+    const compileSqlSetValues = compileSqlTupleArray.map((value) => `${value[0]} = '${value[1]}'`).join(", ")
+    const sql = `UPDATE ADJACENCY
+                 SET ${compileSqlSetValues}
+                 WHERE id = '${entryLine.id}';`
+    await this.dbService.runQuery(sql)
+  }
+
+  private async insertNodeIntoDB(entryLine: EntryLine, force?: boolean): Promise<void> {
+    const compileSqlTupleArray = Object.keys(entryLine).map((key) => [key, entryLine[key]] as [key: string, value: string])
+    let id = compileSqlTupleArray.filter(value => value[0] === "id")[0][1]
+    const sql_ids = `SELECT id
+                     FROM ADJACENCY;`
+    let ids = Array.from(await this.dbService.getQuery(sql_ids)).map(line => line as Entry).filter(value => value.id === id)
+    if (ids.length <= 0) {
+      const compileSqlLine = compileSqlTupleArray.map((value) => value[0]).join(", ")
+      const compileSqlValue = compileSqlTupleArray.map((value) => `'${value[1]}'`).join(", ")
+      const sql = `INSERT INTO ADJACENCY (${compileSqlLine})
+                   VALUES (${compileSqlValue});`
+      await this.dbService.runQuery(sql)
+    } else if (force) {
+      // 若为force 强制更新此id的条目数据
+      await this.updateNodeIntoDB(entryLine)
+    } else {
+      console.log(`数据库中已经存在id: ${id}`)
+    }
+  }
+
+  private async deleteNodeIntoDB(nid: number): Promise<void> {
+    const sql = `DELETE
+                 FROM ADJACENCY
+                 WHERE id = '${nid}';`
+    await this.dbService.runQuery(sql)
   }
 }
 
 class DBService {
-  private readonly dbFile: string;
+  private dbFile: string;
   private db: Database;
 
-  constructor(dbPath: string) {
-    this.dbFile = path.resolve(dbPath);
-  }
-
-  async read() {
+  async read(dbPath: string) {
     const SQL = await initSqlJs()
+    this.dbFile = path.resolve(dbPath);
     if (!existsSync(this.dbFile)) {
       this.db = new SQL.Database();
       this.db.run(`create table ADJACENCY
@@ -400,17 +541,11 @@ class DBService {
       const dbFileBuffer = readFileSync(this.dbFile);
       this.db = new SQL.Database(dbFileBuffer)
     }
-  }
-
-  /**
-   * Returns the current Database instance, or null if not loaded.
-   */
-  getDB(): Database | null {
     return this.db;
   }
 
-  runQuery(sql: string, params: any[] = []) {
-    if (!this.db) throw new Error("Database not loaded (local mode).");
+  async runQuery(sql: string, params: any[] = []) {
+    if (!this.db) throw new Error("Database not loaded.");
     let stmt: Statement | null = null;
     try {
       stmt = this.db.prepare(sql);
@@ -423,7 +558,7 @@ class DBService {
   }
 
   async getQuery<T extends Record<string, any>>(sql: string, params: any[] = []): Promise<T[]> {
-    if (!this.db) throw new Error("Database not loaded (local mode).");
+    if (!this.db) throw new Error("Database not loaded.");
     let stmt: Statement | null = null;
     try {
       stmt = this.db.prepare(sql);
@@ -449,23 +584,21 @@ const flatTable: EntryLine[] = [
   {id: "6", parentId: null, name: '1 Child 2'},
 ];
 
-
-let entryTree = new EntryTree();
-entryTree.fromTable(entryTree.fromTable(flatTable).toEntryArray())
-entryTree.createChildOfNode(entryTree.createChildOfNode(1, {name: "Child"}), {name: "Child"})
-entryTree.toString();
-entryTree.sortBranch(1)
-entryTree.toString();
-console.log(entryTree.getDepthOfNode(5))
-
 async function TestDB() {
-  const db = new DBService("./sqlite.db")
-  await db.read()
-  flatTable.map((item) => {
-    db.runQuery(`INSERT INTO ADJACENCY(id, parentId, name)
-                 VALUES (${item.id}, ${item.parentId}, "${item.name}")`)
-  })
+  let entryTree = new EntryTree();
+  await entryTree.prepareDataBase("./sqlite.db")
+  await entryTree.fromDatabaseBuildTree()
+  // entryTree.fromEntryArrayBuildTree(flatTable)
+  // entryTree.toString();
+  // let a = await entryTree.createChildNode(1, {name: "Child"})
+  // let b = await entryTree.createChildNode(a, {name: "Child"})
+  // await entryTree.toString();
+  await entryTree.sortBranch(1)
+  entryTree.toString();
+  // console.log(entryTree.getDepthOfNode(5))
 }
 
-// entryTree只用于表示树形结构和排序只需要ID name，而数据用DB查询，是否可以
-// TestDB().then(r => console.log("finish"))
+// entryTree只用于表示树形结构和排序只需要id、name，而数据用DB查询修改，是否可以
+// 根据树生成树，然后根据树结点同步数据表，这样树中的每个结点都是一个数据表中的记录。
+// 创建一个表，这个表用来记录顺序如何？
+TestDB().then(r => console.log("finish"))
