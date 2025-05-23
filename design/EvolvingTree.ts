@@ -18,11 +18,13 @@
 // 例如 细胞的语义是由细胞膜细胞核细胞质等构成具有细胞功能的语义。
 
 import xmlFormat from 'xml-formatter';
-import {Document, DOMParser, Element, XMLSerializer} from '@xmldom/xmldom';
+import {Document as XMLDocument, DOMParser, Element as XMLElement, XMLSerializer} from '@xmldom/xmldom';
 import initSqlJs, {Database, Statement} from "sql.js";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 import path from "path";
 import {pinyin} from "pinyin-pro";
+
+export {XMLElement, XMLDocument}
 
 interface Entry {
   id?: string; //条目ID
@@ -36,6 +38,7 @@ interface Entry {
 
 interface EntryLine extends Entry {
   id: string; //条目ID
+  parentId?: string; //条目父ID
   depth?: string; //条目所在位置深度
   sequence?: string; //条目树的顺序
 }
@@ -89,8 +92,8 @@ class NidRegister {
 
 class EntryTree {
   public static readonly FOREST_ID: string = "0"
-  private readonly document: Document;
-  private readonly forest: Element;
+  private readonly document: XMLDocument;
+  private readonly forest: XMLElement;
   private readonly dom: DOMParser = new DOMParser();
   // forest 深林，语义为根结点 0 存储着一片深林
   private readonly empty_xml = `<forest id=${EntryTree.FOREST_ID}></forest>`
@@ -107,13 +110,13 @@ class EntryTree {
   }
 
   static visitor(array: any[], action: Function) {
-    const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
+    const queue: { child: XMLElement; depth: number }[] = array.map(child => ({child, depth: 0}));
     while (queue.length > 0) {
-      const {child, depth} = queue.shift() as { child: Element; depth: number };
+      const {child, depth} = queue.shift() as { child: XMLElement; depth: number };
       let isStop: boolean = action(child, depth) || false;
       if (isStop) return
       if (child.hasChildNodes()) {
-        queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
+        queue.push(...Array.from(child.childNodes).map(child => ({child: child as XMLElement, depth: depth + 1})));
       }
     }
   }
@@ -133,11 +136,11 @@ class EntryTree {
     await this.dbService.read(dbPath)
   }
 
-  getRoot(): Element {
+  getForest(): XMLElement {
     return this.forest;
   }
 
-  getDocument(): Document {
+  getDocument(): XMLDocument {
     return this.document
   }
 
@@ -169,7 +172,7 @@ class EntryTree {
    */
   async createSiblingNode(nid: number, entry: Entry): Promise<number> {
     const id = this.nidRegister.applyNid();
-    const parentNode = this.findNodeElementById(nid).parentNode as Element;
+    const parentNode = this.findNodeElementById(nid).parentNode as XMLElement;
     const node = this.document.createElement("node");
     node.setAttribute("id", id);
     node.setAttribute("name", entry.name);
@@ -204,7 +207,7 @@ class EntryTree {
    */
   async removeBranch(nid: number) {
     const needRemoveBranch = this.findNodeElementById(nid)
-    await this.forEachChildTreeQueue([needRemoveBranch, ...needRemoveBranch.childNodes], async (child: Element) => {
+    await this.forEachChildTreeQueue([needRemoveBranch, ...needRemoveBranch.childNodes], async (child: XMLElement) => {
       const id = Number(child.getAttribute("id"))
       this.nidRegister.releaseNid(id)
       await this.deleteNodeIntoDB(id)
@@ -259,11 +262,11 @@ class EntryTree {
     // 对子元素进行克隆，对克隆后的元素进行排序。
     // 先克隆子元素，然后清空子元素，然后排序克隆的子元素。
     const needSortBranchNode = this.findNodeElementById(branchNid)
-    await this.forEachChildTreeQueue([needSortBranchNode], (needSortBranchNode: Element) => {
+    await this.forEachChildTreeQueue([needSortBranchNode], (needSortBranchNode: XMLElement) => {
       // 克隆选定分支的子元素并映射为列表
-      const needSortedClonedNode = [...needSortBranchNode.childNodes].map((value: Element) => value.cloneNode(true) as Element);
+      const needSortedClonedNode = [...needSortBranchNode.childNodes].map((value: XMLElement) => value.cloneNode(true) as XMLElement);
       // 清空选定分支的子元素
-      [...needSortBranchNode.childNodes].forEach((value: Element) => needSortBranchNode.removeChild(value));
+      [...needSortBranchNode.childNodes].forEach((value: XMLElement) => needSortBranchNode.removeChild(value));
       // 对元素从小到大进行排序
       needSortedClonedNode.sort(function (a, b) {
         // 如果相同就返回0
@@ -301,7 +304,7 @@ class EntryTree {
   async getDepthOfNode(nid: number) {
     const node = this.findNodeElementById(nid)
     let number: { depth: number } = {depth: null}
-    await this.forEachChildTreeQueue([...this.forest.childNodes], (child: Element, depth: number) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], (child: XMLElement, depth: number) => {
       if (node.getAttribute("id") == child.getAttribute("id")) {
         number.depth = depth
         return true
@@ -345,7 +348,7 @@ class EntryTree {
     }
   }
 
-  findNodeElementById(nid: number): Element {
+  findNodeElementById(nid: number): XMLElement {
     return this.document.getElementById(nid.toString())
   }
 
@@ -367,7 +370,7 @@ class EntryTree {
     //   这个负责更新数据库中条目的顺序列的值，依据是DOM树中的顺序。
     //   @buildTreeFromDatabase()配合按order顺序读取。
     let order: number = 1
-    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: Element) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: XMLElement) => {
       const entryLine: EntryLine = {
         id: child.getAttribute("id"),
         name: child.getAttribute("name"),
@@ -379,7 +382,7 @@ class EntryTree {
   }
 
   async refreshEntryTableDepth() {
-    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: Element) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: XMLElement) => {
       const entryLine: EntryLine = {
         id: child.getAttribute("id"),
         name: child.getAttribute("name"),
@@ -405,7 +408,7 @@ class EntryTree {
     })
 
     // 定义一个递归函数，用于构建每个节点的子树
-    function buildTree(entry: Element) {
+    function buildTree(entry: XMLElement) {
       flatTable.forEach(line => {
         if (line.parentId === entry.getAttribute("id")) {
           const childNode = entryMap.get(line.id)
@@ -446,7 +449,7 @@ class EntryTree {
       .map(rootNode => {
         const queue: any[] = [entryMap.get(rootNode.id)]
         while (queue.length > 0) {
-          const entry = queue.shift() as Element;
+          const entry = queue.shift() as XMLElement;
           flatTable.forEach(line => {
             if (line.parentId === entry.getAttribute("id")) {
               const entryNode = entryMap.get(line.id)
@@ -473,15 +476,15 @@ class EntryTree {
    */
   private async forEachChildTreeQueue(array: any[], action: Function): Promise<void> {
     // const queue: any[] = [...array];
-    const queue: { child: Element; depth: number }[] = array.map(child => ({child, depth: 0}));
+    const queue: { child: XMLElement; depth: number }[] = array.map(child => ({child, depth: 0}));
     while (queue.length > 0) {
-      // const child = queue[i] as Element;
-      const {child, depth} = queue.shift() as { child: Element; depth: number };
+      // const child = queue[i] as XMLElement;
+      const {child, depth} = queue.shift() as { child: XMLElement; depth: number };
       let isStop: boolean = await action(child, depth) || false;
       if (isStop) return
       if (child.hasChildNodes()) {
         // queue.push(...child.childNodes)
-        queue.push(...Array.from(child.childNodes).map(child => ({child: child as Element, depth: depth + 1})));
+        queue.push(...Array.from(child.childNodes).map(child => ({child: child as XMLElement, depth: depth + 1})));
       }
     }
   }
@@ -582,6 +585,7 @@ class DBService {
   }
 }
 
+export {EntryTree, DBService, NidRegister};
 
 const flatTable: EntryLine[] = [
   {id: "1", parentId: null, name: '1 Child 1'},
