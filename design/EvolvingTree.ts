@@ -88,17 +88,22 @@ class NidRegister {
 }
 
 class EntryTree {
-  private readonly doc: Document;
-  private readonly root: Element;
+  public static readonly FOREST_ID: string = "0"
+  private readonly document: Document;
+  private readonly forest: Element;
   private readonly dom: DOMParser = new DOMParser();
-  private readonly empty_xml = `<itree id="tree"></itree>`
+  // forest 深林，语义为根结点 0 存储着一片深林
+  private readonly empty_xml = `<forest id=${EntryTree.FOREST_ID}></forest>`
   private nidRegister: NidRegister;
   private dbService: DBService;
 
+  /**
+   * id = 0，为系统保留id，语义为forest深林。深林的子结点为树的Root结点。
+   */
   constructor() {
-    this.doc = this.dom.parseFromString(this.empty_xml, "text/xml");
-    this.root = this.doc.getElementById("tree")
-    this.nidRegister = new NidRegister()
+    this.document = this.dom.parseFromString(this.empty_xml, "text/xml");
+    this.forest = this.document.getElementById(EntryTree.FOREST_ID)
+    this.nidRegister = new NidRegister([Number(EntryTree.FOREST_ID)])
   }
 
   static visitor(array: any[], action: Function) {
@@ -129,11 +134,11 @@ class EntryTree {
   }
 
   getRoot(): Element {
-    return this.root;
+    return this.forest;
   }
 
   getDocument(): Document {
-    return this.doc
+    return this.document
   }
 
   /**
@@ -143,7 +148,7 @@ class EntryTree {
    */
   async createChildNode(nid: number, entry: Entry): Promise<number> {
     const id = this.nidRegister.applyNid()
-    const node = this.doc.createElement("node")
+    const node = this.document.createElement("node")
     node.setAttribute("id", id);
     node.setAttribute("name", entry.name);
     this.findNodeElementById(nid).appendChild(node)
@@ -165,7 +170,7 @@ class EntryTree {
   async createSiblingNode(nid: number, entry: Entry): Promise<number> {
     const id = this.nidRegister.applyNid();
     const parentNode = this.findNodeElementById(nid).parentNode as Element;
-    const node = this.doc.createElement("node");
+    const node = this.document.createElement("node");
     node.setAttribute("id", id);
     node.setAttribute("name", entry.name);
     parentNode.appendChild(node);
@@ -184,7 +189,7 @@ class EntryTree {
    * @param nid
    */
   async removeNode(nid: number) {
-    const needRemoveNode = this.doc.getElementById(nid.toString())
+    const needRemoveNode = this.document.getElementById(nid.toString())
     for (const childNode of needRemoveNode.childNodes) {
       needRemoveNode.parentNode.appendChild(childNode.cloneNode(true))
     }
@@ -296,7 +301,7 @@ class EntryTree {
   async getDepthOfNode(nid: number) {
     const node = this.findNodeElementById(nid)
     let number: { depth: number } = {depth: null}
-    await this.forEachChildTreeQueue([...this.root.childNodes], (child: Element, depth: number) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], (child: Element, depth: number) => {
       if (node.getAttribute("id") == child.getAttribute("id")) {
         number.depth = depth
         return true
@@ -341,12 +346,12 @@ class EntryTree {
   }
 
   findNodeElementById(nid: number): Element {
-    return this.doc.getElementById(nid.toString())
+    return this.document.getElementById(nid.toString())
   }
 
   toString() {
     console.log(`NidTable: ${this.nidRegister.toArray()}`)
-    console.log(xmlFormat(new XMLSerializer().serializeToString(this.doc)) + "\n")
+    console.log(xmlFormat(new XMLSerializer().serializeToString(this.document)) + "\n")
   }
 
   /**
@@ -362,7 +367,7 @@ class EntryTree {
     //   这个负责更新数据库中条目的顺序列的值，依据是DOM树中的顺序。
     //   @buildTreeFromDatabase()配合按order顺序读取。
     let order: number = 1
-    await this.forEachChildTreeQueue([...this.root.childNodes], async (child: Element) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: Element) => {
       const entryLine: EntryLine = {
         id: child.getAttribute("id"),
         name: child.getAttribute("name"),
@@ -374,7 +379,7 @@ class EntryTree {
   }
 
   async refreshEntryTableDepth() {
-    await this.forEachChildTreeQueue([...this.root.childNodes], async (child: Element) => {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: Element) => {
       const entryLine: EntryLine = {
         id: child.getAttribute("id"),
         name: child.getAttribute("name"),
@@ -391,7 +396,8 @@ class EntryTree {
   fromEntryArrayBuildTree(flatTable: EntryLine[]) {
     const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
     flatTable.map(async line => {
-      const entry = this.doc.createElement("node")
+      if (line.id == EntryTree.FOREST_ID) throw new Error("id = 0，为系统保留id，语义为forest深林。");
+      const entry = this.document.createElement("node")
       entry.setAttribute("id", line.id);
       entry.setAttribute("name", line.name);
       entryMap.set(line.id, entry);
@@ -412,7 +418,7 @@ class EntryTree {
     flatTable
       .filter(item => item.parentId === null || item.parentId === "null")
       .map(rootNode => {
-        this.root.appendChild(buildTree(entryMap.get(rootNode.id)))
+        this.forest.appendChild(buildTree(entryMap.get(rootNode.id)))
       });
     this.nidRegister.copyNidFromTable(flatTable);
     return this
@@ -428,7 +434,8 @@ class EntryTree {
                  ORDER BY sequence;`
     let flatTable = Array.from(await this.dbService.getQuery(sql)).map(line => line as Entry)
     flatTable.map(line => {
-      const entry = this.doc.createElement("node")
+      if (line.id == EntryTree.FOREST_ID) throw new Error("id = 0，为系统保留id，语义为forest深林。");
+      const entry = this.document.createElement("node")
       entry.setAttribute("id", line.id);
       entry.setAttribute("name", line.name);
       entryMap.set(line.id, entry);
@@ -448,7 +455,7 @@ class EntryTree {
             }
           })
         }
-        this.root.appendChild(entryMap.get(rootNode.id))
+        this.forest.appendChild(entryMap.get(rootNode.id))
       });
     this.nidRegister.copyNidFromTable(flatTable);
     return this
