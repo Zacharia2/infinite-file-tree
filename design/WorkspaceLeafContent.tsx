@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {EntryTree, XMLElement} from './EvolvingTree'
+import ReactDOM from "react-dom/client";
 
 
 interface EntryNode {
@@ -7,6 +8,13 @@ interface EntryNode {
   name?: string; //条目名字
   depth?: number; //条目所在位置深度
 }
+
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
+    <MyForest/>
+  </React.StrictMode>,
+);
 
 function WorkspaceLeafContent(props: {}) {
   return (
@@ -28,7 +36,7 @@ function NavHeader(props: {}) {
   );
 }
 
-export function myForest() {
+export function MyForest() {
   const [contextState, setContextState] = useState(null)
   useEffect(() => {
     (async function anyNameFunction() {
@@ -42,7 +50,7 @@ export function myForest() {
   // 递归只需要传递上下文和下一层结点的属性
 
   // 深林结点，构造树结点
-  return [...contextState.getForest().childNodes].map(node => node as XMLElement).map(element => (
+  let Forest = [...contextState.getForest().childNodes].map(node => node as XMLElement).map(element =>
     <TreeItemNavFile
       context={contextState}
       data={{
@@ -50,7 +58,8 @@ export function myForest() {
         name: element.getAttribute("name"),
         depth: Number(element.getAttribute("depth")),
       }}/>
-  ))
+  )
+  return (<>{Forest}</>)
 }
 
 function NavFilesContainer(props: {}) {
