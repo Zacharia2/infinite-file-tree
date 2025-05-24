@@ -16,11 +16,12 @@
 // 只要了解某个语言件的语义，呢么他的逻辑构成, 它的更细微层级就不重要，就不需要放大。
 // 函数 类 模块 包，每个层次或每个层次的单体的意义就是用更小层次的单位构建当前层次的语义。
 // 例如 细胞的语义是由细胞膜细胞核细胞质等构成具有细胞功能的语义。
-
+import {App} from "obsidian";
 import xmlFormat from 'xml-formatter';
 import {Document as XMLDocument, DOMParser, Element as XMLElement, XMLSerializer} from '@xmldom/xmldom';
-import initSqlJs, {Database, Statement} from "sql.js";
-import {existsSync, readFileSync, writeFileSync} from "fs";
+import initSqlJs, {Database, SqlJsStatic, Statement} from "sql.js";
+import {existsSync, readFileSync} from "fs";
+import {writeFile} from "fs/promises";
 import path from "path";
 import {pinyin} from "pinyin-pro";
 
@@ -96,7 +97,7 @@ class EntryTree {
   private readonly forest: XMLElement;
   private readonly dom: DOMParser = new DOMParser();
   // forest 深林，语义为根结点 0 存储着一片深林
-  private readonly empty_xml = `<forest id=${EntryTree.FOREST_ID}></forest>`
+  private readonly empty_xml = `<forest id="${EntryTree.FOREST_ID}" />`
   private nidRegister: NidRegister;
   private dbService: DBService;
 
@@ -129,6 +130,20 @@ class EntryTree {
   setNidRegister(nidRegister: NidRegister) {
     this.nidRegister = nidRegister
     return this
+  }
+
+  /**
+   * @param dbPath sqlite数据库文件路径
+   * @param app
+   */
+  async prepareDataBase(dbPath: string, app?: App) {
+    this.dbService = new DBService();
+    if (!!app) {
+      await this.dbService.read(dbPath, app)
+    } else {
+      await this.dbService.read(dbPath)
+    }
+    if (!!!this.dbService.getDB()) throw new Error("No DB found");
   }
 
   getForest(): XMLElement {
@@ -335,8 +350,7 @@ class EntryTree {
   }
 
   toString() {
-    console.log(`NidTable: ${this.nidRegister.toArray()}`)
-    console.log(xmlFormat(new XMLSerializer().serializeToString(this.document)) + "\n")
+    return `NidTable: ${this.nidRegister.toArray()}\n${xmlFormat(new XMLSerializer().serializeToString(this.document))}\n`
   }
 
   /**
@@ -414,11 +428,8 @@ class EntryTree {
    * 从数据库中读取数据，仅使用id、name列用于构建和排序树。depth将在构建完成后刷新。
    * 准备db服务，用于后面的数据变更。
    * 本结构采用树表分离的方式，共同建构虚拟生长树。其中树表示层级，表表示结点全部信息。
-   * @param dbPath sqlite数据库文件路径
    */
-  async fromDatabaseBuildTree(dbPath: string) {
-    this.dbService = new DBService();
-    await this.dbService.read(dbPath)
+  async fromDatabaseBuildTree() {
     const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
     const sql = `SELECT id, parentId, name
                  FROM ADJACENCY
@@ -531,8 +542,17 @@ class DBService {
   private dbFile: string;
   private db: Database;
 
-  async read(dbPath: string) {
-    const SQL = await initSqlJs()
+  async read(dbPath: string, app?: App) {
+    let SQL: SqlJsStatic
+    if (!!app) {
+      const adapter = app.vault.adapter;
+      let wasmBinary = await adapter.readBinary(`${app.vault.configDir}/plugins/infinite-file-tree/sql-wasm.wasm`);
+      SQL = await initSqlJs({
+        wasmBinary: wasmBinary
+      });
+    } else {
+      SQL = await initSqlJs();
+    }
     this.dbFile = path.resolve(dbPath);
     if (!existsSync(this.dbFile)) {
       this.db = new SQL.Database();
@@ -556,6 +576,13 @@ class DBService {
     return this.db;
   }
 
+  /**
+   * Returns the current Database instance, or null if not loaded.
+   */
+  getDB(): Database | null {
+    return this.db;
+  }
+
   async runQuery(sql: string, params: any[] = []) {
     if (!this.db) throw new Error("Database not loaded.");
     let stmt: Statement | null = null;
@@ -563,7 +590,7 @@ class DBService {
       stmt = this.db.prepare(sql);
       stmt.bind(params);
       stmt.run();
-      writeFileSync(this.dbFile, this.db.export());
+      writeFile(this.dbFile, this.db.export());
     } finally {
       if (stmt) stmt.free();
     }
@@ -588,7 +615,7 @@ class DBService {
 
 export {EntryTree, DBService, NidRegister};
 
-const flatTable: EntryLine[] = [
+const TestFlatEntryTable: EntryLine[] = [
   {id: "1", parentId: null, name: '1 Child 1'},
   {id: "2", parentId: "1", name: '2 Grandchild 1'},
   {id: "3", parentId: "2", name: '3 Child 3'},
@@ -599,14 +626,15 @@ const flatTable: EntryLine[] = [
 
 async function TestDB() {
   let entryTree = new EntryTree();
-  await entryTree.fromDatabaseBuildTree("./sqlite.db")
+  await entryTree.prepareDataBase("./sqlite.db")
+  await entryTree.fromDatabaseBuildTree()
   // entryTree.fromEntryArrayBuildTree(flatTable)
   // entryTree.toString();
   // let a = await entryTree.createChildNode(1, {name: "Child"})
   // let b = await entryTree.createChildNode(a, {name: "Child"})
   // await entryTree.toString();
   await entryTree.sortBranch(1)
-  entryTree.toString();
+  console.log(entryTree.toString())
   // console.log(entryTree.getDepthOfNode(5))
 }
 
