@@ -11,6 +11,9 @@ importers:
       '@ozntel/local-storage-handler':
         specifier: 1.0.3
         version: 1.0.3
+      '@tanstack/react-query':
+        specifier: ^5.76.2
+        version: 5.76.2(react@18.2.0)
       '@xmldom/xmldom':
         specifier: ^0.9.8
         version: 0.9.8
@@ -479,6 +482,14 @@ packages:
     resolution: {integrity: sha512-LWbXUBwn/bcLx2sSsqy7pK5o+Nr+VCoRoAohfJ5C/aBio9nfJmGQqHAhU6pwxV/RmyTk5AqdySma7uwWGlmeuA==}
     cpu: [x64]
     os: [win32]
+
+  '@tanstack/query-core@5.76.2':
+    resolution: {integrity: sha512-PFGwWh5ss9cJQ67l6bZ7hqXbisX2gy13G2jP+VGY1bgdbCfOMWh6UBVnN62QbFXro6CCoX9hYzTnZHr6Rz00YQ==}
+
+  '@tanstack/react-query@5.76.2':
+    resolution: {integrity: sha512-rGkWberCrFdIxMdvSAJM/UOKeu0O/JVTbMmfhQoJpiU9Uq0EDx2EMCadnNuJWbXR4smDA2t7DY3NKkYFmDVS5A==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@types/codemirror@5.60.8':
     resolution: {integrity: sha512-VjFgDF/eB+Aklcy15TtOTLQeMjTo07k7KAjql8OK5Dirr7a6sJY4T1uVBDuTVG9VEmn1uUsohOpYnVfgC6/jyw==}
@@ -1251,6 +1262,13 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.37.0':
     optional: true
+
+  '@tanstack/query-core@5.76.2': {}
+
+  '@tanstack/react-query@5.76.2(react@18.2.0)':
+    dependencies:
+      '@tanstack/query-core': 5.76.2
+      react: 18.2.0
 
   '@types/codemirror@5.60.8':
     dependencies:

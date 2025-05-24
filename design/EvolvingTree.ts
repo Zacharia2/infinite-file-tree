@@ -109,6 +109,11 @@ class EntryTree {
     this.nidRegister = new NidRegister([Number(EntryTree.FOREST_ID)])
   }
 
+  /**
+   * 深度遍历元素
+   * @param array 需要深度遍历的元素列表
+   * @param action 对于每个元素需要做的处理
+   */
   static visitor(array: any[], action: Function) {
     const queue: { child: XMLElement; depth: number }[] = array.map(child => ({child, depth: 0}));
     while (queue.length > 0) {
@@ -124,16 +129,6 @@ class EntryTree {
   setNidRegister(nidRegister: NidRegister) {
     this.nidRegister = nidRegister
     return this
-  }
-
-  /**
-   * 准备db服务，用于后面的数据变更。
-   * 本结构采用树表分离的方式，共同建构虚拟生长树。其中树表示层级，表表示结点全部信息。
-   * @param dbPath
-   */
-  async prepareDataBase(dbPath: string) {
-    this.dbService = new DBService();
-    await this.dbService.read(dbPath)
   }
 
   getForest(): XMLElement {
@@ -300,19 +295,6 @@ class EntryTree {
     await this.refreshEntryTableOrder()
   }
 
-  // 不需要暴露，只需要查表
-  async getDepthOfNode(nid: number) {
-    const node = this.findNodeElementById(nid)
-    let number: { depth: number } = {depth: null}
-    await this.forEachChildTreeQueue([...this.forest.childNodes], (child: XMLElement, depth: number) => {
-      if (node.getAttribute("id") == child.getAttribute("id")) {
-        number.depth = depth
-        return true
-      }
-    })
-    return number.depth
-  }
-
   async getNodeAttributeInDB(nid: number, name?: string) {
     if (name) {
       const sql = `SELECT '${name}'
@@ -381,12 +363,13 @@ class EntryTree {
     })
   }
 
-  async refreshEntryTableDepth() {
-    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: XMLElement) => {
+  async refreshDepth() {
+    await this.forEachChildTreeQueue([...this.forest.childNodes], async (child: XMLElement, depth: number) => {
+      child.setAttribute("depth", depth.toString())
       const entryLine: EntryLine = {
         id: child.getAttribute("id"),
         name: child.getAttribute("name"),
-        depth: (await this.getDepthOfNode(Number(child.getAttribute("id")))).toString(),
+        depth: depth.toString(),
       }
       await this.updateNodeIntoDB(entryLine)
     })
@@ -428,9 +411,14 @@ class EntryTree {
   }
 
   /**
-   * 从数据库中读取数据，仅使用id、name列用于构建和排序树。
+   * 从数据库中读取数据，仅使用id、name列用于构建和排序树。depth将在构建完成后刷新。
+   * 准备db服务，用于后面的数据变更。
+   * 本结构采用树表分离的方式，共同建构虚拟生长树。其中树表示层级，表表示结点全部信息。
+   * @param dbPath sqlite数据库文件路径
    */
-  async fromDatabaseBuildTree() {
+  async fromDatabaseBuildTree(dbPath: string) {
+    this.dbService = new DBService();
+    await this.dbService.read(dbPath)
     const entryMap = new Map(); // 创建一个映射，方便通过id查找节点
     const sql = `SELECT id, parentId, name
                  FROM ADJACENCY
@@ -443,7 +431,6 @@ class EntryTree {
       entry.setAttribute("name", line.name);
       entryMap.set(line.id, entry);
     })
-
     flatTable
       .filter(item => item.parentId === null || item.parentId === "null")
       .map(rootNode => {
@@ -460,8 +447,22 @@ class EntryTree {
         }
         this.forest.appendChild(entryMap.get(rootNode.id))
       });
+    await this.refreshDepth()
     this.nidRegister.copyNidFromTable(flatTable);
     return this
+  }
+
+  // 不需要暴露，只需要查表
+  private async getDepthOfNode(nid: number) {
+    const node = this.findNodeElementById(nid)
+    let number: { depth: number } = {depth: null}
+    await this.forEachChildTreeQueue([...this.forest.childNodes], (child: XMLElement, depth: number) => {
+      if (node.getAttribute("id") == child.getAttribute("id")) {
+        number.depth = depth
+        return true
+      }
+    })
+    return number.depth
   }
 
   /**
@@ -598,8 +599,7 @@ const flatTable: EntryLine[] = [
 
 async function TestDB() {
   let entryTree = new EntryTree();
-  await entryTree.prepareDataBase("./sqlite.db")
-  await entryTree.fromDatabaseBuildTree()
+  await entryTree.fromDatabaseBuildTree("./sqlite.db")
   // entryTree.fromEntryArrayBuildTree(flatTable)
   // entryTree.toString();
   // let a = await entryTree.createChildNode(1, {name: "Child"})

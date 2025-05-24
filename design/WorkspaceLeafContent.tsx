@@ -1,12 +1,11 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
+import {EntryTree, XMLElement} from './EvolvingTree'
 
-interface FileNode {
-  title?: string; // 结点名称eid
-  type?: string; // 结点类型，
-  text: string; // 文本型结点，或者文件路径
-  field?: Record<string, string>; // 结点字段
-  depth?: number;
-  children: FileNode[]; // 子节点。
+
+interface EntryNode {
+  id?: number; //条目ID
+  name?: string; //条目名字
+  depth?: number; //条目所在位置深度
 }
 
 function WorkspaceLeafContent(props: {}) {
@@ -29,36 +28,30 @@ function NavHeader(props: {}) {
   );
 }
 
-export const myTree = (
-  <TreeItemNavFile
-    text="Root"
-    children={[
-      {
-        text: '1 Child 1',
-        children: [
-          {
-            text: '2 Grandchild 1',
-            children: [
-              {
-                text: '3 Child 3',
-                children: [
-                  {
-                    text: '4 Grandchild 3',
-                    children: [],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        text: '1 Child 2',
-        children: [],
-      },
-    ]}
-  />
-);
+export function myForest() {
+  const [contextState, setContextState] = useState(null)
+  useEffect(() => {
+    (async function anyNameFunction() {
+      const entryTree = new EntryTree()
+      await entryTree.fromDatabaseBuildTree("./sqlite.db")
+      setContextState(entryTree)
+    })();
+  })
+  // domTree 递归是一层层访问的。
+  // 只需要id、name 和 上下文对象。
+  // 递归只需要传递上下文和下一层结点的属性
+
+  // 深林结点，构造树结点
+  return [...contextState.getForest().childNodes].map(node => node as XMLElement).map(element => (
+    <TreeItemNavFile
+      context={contextState}
+      data={{
+        id: Number(element.getAttribute("id")),
+        name: element.getAttribute("name"),
+        depth: Number(element.getAttribute("depth")),
+      }}/>
+  ))
+}
 
 function NavFilesContainer(props: {}) {
   return (
@@ -66,14 +59,28 @@ function NavFilesContainer(props: {}) {
       <div style={{}}>
         <div style={{width: '294px', height: '0.1px', marginBottom: '0px'}}></div>
       </div>
-      <TreeItemNavFile text={''} children={[]}></TreeItemNavFile>
+      <TreeItemNavFile context={null} data={undefined}/>
     </div>
   );
 }
 
-function TreeItemNavFile(props: FileNode) {
-  // 初始化 depth 为 0，如果不是第一次调用，则使用传入的 depth
-  const depth = props.depth || 0;
+function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
+  // 树结点
+  // 此节点的信息已经从父节点解析，只需要访问即可获得
+  // children需要从父节点解析后传递给子节点
+  const depth = props.data.depth || 0;
+
+  // 解析子结点
+  const children: EntryNode[] = [];
+  const entry: EntryNode | null = null;
+  [...props.context.findNodeElementById(props.data.id).childNodes]
+    .map(node => node as XMLElement)
+    .forEach(node => {
+      entry.id = Number(node.getAttribute("id"))
+      entry.name = node.getAttribute("name");
+      entry.depth = props.data.depth
+      children.push(entry);
+    })
   // const indentUnit = 17;
   // const InlineStart = depth * indentUnit;
   // marginInlineStart: `${-InlineStart}px`,
@@ -101,23 +108,37 @@ function TreeItemNavFile(props: FileNode) {
           style={{
             display: 'inline-block',
           }}>
-          {props.text}
+          {props.data.name}
         </div>
       </div>
-      {props.children.length > 0 &&
-        props.children.map((child, index) => {
+      {children.length > 0 &&
+        children.map((child) => {
           // 传递当前子元素的 content 和 children 属性
-          return <TreeItemChildren key={index} depth={depth + 1} text={child.text} children={child.children}/>;
+          return <TreeItemChildren
+            key={child.id}
+            context={props.context}
+            data={{
+              id: child.id,
+              name: child.name,
+              depth: child.depth,
+            }}/>;
         })}
     </div>
   );
 }
 
-function TreeItemChildren(props: FileNode) {
+function TreeItemChildren(props: { context: EntryTree, data: EntryNode }) {
+  // 树的一个子结点。
   return (
     <div className="tree-item-children nav-file-children" style={{}}>
       <div style={{width: '260px', height: ' 0.1px', marginBottom: '0px'}}></div>
-      <TreeItemNavFile text={props.text} children={props.children} depth={props.depth}></TreeItemNavFile>
+      <TreeItemNavFile
+        context={props.context}
+        data={{
+          id: props.data.id,
+          name: props.data.name,
+          depth: props.data.depth
+        }}/>
       {/* <div className="tree-item nav-file is-collapsed">
                   <div
                       className="tree-item-self nav-file-title is-clickable mod-collapsible"
