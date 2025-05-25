@@ -4,6 +4,9 @@ import { Root, createRoot } from 'react-dom/client';
 import FileTreeAlternativePlugin from './main';
 import MainTreeComponent from './components/MainView/MainComponent';
 import { RecoilRoot } from 'recoil';
+import {ETreeForest} from "../design/WorkspaceLeafContent";
+import {QueryClientProvider} from "@tanstack/react-query";
+import {QueryClient} from "@tanstack/react-query";
 
 export class FileTreeView extends ItemView {
     plugin: FileTreeAlternativePlugin;
@@ -50,5 +53,18 @@ export class FileTreeView extends ItemView {
                 </RecoilRoot>
             </div>
         );
+        const queryClient= new QueryClient()
+        this.root.render(
+          <div className="file-tree-plugin-view">
+              <RecoilRoot>
+                      <QueryClientProvider client={queryClient}>
+                          MyForest
+                          <br/>
+                          <ETreeForest app={this.plugin.app}/>
+                      </QueryClientProvider >
+              </RecoilRoot>
+          </div>
+        );
+
     }
 }

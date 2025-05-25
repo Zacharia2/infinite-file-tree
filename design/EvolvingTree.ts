@@ -138,12 +138,8 @@ class EntryTree {
    */
   async prepareDataBase(dbPath: string, app?: App) {
     this.dbService = new DBService();
-    if (!!app) {
-      await this.dbService.read(dbPath, app)
-    } else {
-      await this.dbService.read(dbPath)
-    }
-    if (!!!this.dbService.getDB()) throw new Error("No DB found");
+    app ? await (await this.dbService.ensureInitSqlJsWithApp(app)).read(dbPath) : await (await this.dbService.ensureInitSqlJs()).read(dbPath)
+    if (this.dbService.getDB() == null) throw new Error("No DB found");
   }
 
   getForest(): XMLElement {
@@ -541,21 +537,24 @@ class EntryTree {
 class DBService {
   private dbFile: string;
   private db: Database;
+  private SQL: SqlJsStatic
 
-  async read(dbPath: string, app?: App) {
-    let SQL: SqlJsStatic
-    if (!!app) {
-      const adapter = app.vault.adapter;
-      let wasmBinary = await adapter.readBinary(`${app.vault.configDir}/plugins/infinite-file-tree/sql-wasm.wasm`);
-      SQL = await initSqlJs({
-        wasmBinary: wasmBinary
-      });
-    } else {
-      SQL = await initSqlJs();
-    }
+  async ensureInitSqlJs() {
+    this.SQL = await initSqlJs();
+    return this
+  }
+
+  async ensureInitSqlJsWithApp(app: App) {
+    const wasmFile = `${app.vault.configDir}/plugins/infinite-file-tree/sql-wasm.wasm`
+    const wasmBinary = await app.vault.adapter.readBinary(wasmFile);
+    this.SQL = await initSqlJs({wasmBinary: wasmBinary});
+    return this
+  }
+
+  async read(dbPath: string) {
     this.dbFile = path.resolve(dbPath);
     if (!existsSync(this.dbFile)) {
-      this.db = new SQL.Database();
+      this.db = new this.SQL.Database();
       this.db.run(`create table ADJACENCY
                    (
                        id       TEXT not null
@@ -571,7 +570,7 @@ class DBService {
                    );`);
     } else {
       const dbFileBuffer = readFileSync(this.dbFile);
-      this.db = new SQL.Database(dbFileBuffer)
+      this.db = new this.SQL.Database(dbFileBuffer)
     }
     return this.db;
   }
@@ -580,7 +579,7 @@ class DBService {
    * Returns the current Database instance, or null if not loaded.
    */
   getDB(): Database | null {
-    return this.db;
+    return this.db ?? null;
   }
 
   async runQuery(sql: string, params: any[] = []) {
@@ -628,16 +627,14 @@ async function TestDB() {
   let entryTree = new EntryTree();
   await entryTree.prepareDataBase("./sqlite.db")
   await entryTree.fromDatabaseBuildTree()
-  // entryTree.fromEntryArrayBuildTree(flatTable)
-  // entryTree.toString();
-  // let a = await entryTree.createChildNode(1, {name: "Child"})
-  // let b = await entryTree.createChildNode(a, {name: "Child"})
-  // await entryTree.toString();
+// entryTree.fromEntryArrayBuildTree(flatTable)
+// entryTree.toString();
+//   let a = await entryTree.createChildNode(1, {name: "Child"})
+// await entryTree.toString();
   await entryTree.sortBranch(1)
   console.log(entryTree.toString())
-  // console.log(entryTree.getDepthOfNode(5))
 }
 
 // entryTree只用于表示树形结构和排序只需要id、name，而数据用DB查询修改，是否可以
 // 根据树生成树，然后根据树结点同步数据表，这样树中的每个结点都是一个数据表中的记录。
-TestDB().then(r => console.log("finish"))
+// TestDB().then(r => console.log("finish"))

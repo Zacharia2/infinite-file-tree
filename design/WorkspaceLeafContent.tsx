@@ -1,20 +1,13 @@
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import {EntryTree, XMLElement} from './EvolvingTree'
-import ReactDOM from "react-dom/client";
-
+import {App} from "obsidian";
+import {useQuery} from "@tanstack/react-query";
 
 interface EntryNode {
-  id?: number; //条目ID
-  name?: string; //条目名字
-  depth?: number; //条目所在位置深度
+  id: number; //条目ID
+  name: string; //条目名字
+  depth: number; //条目所在位置深度
 }
-
-
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <MyForest/>
-  </React.StrictMode>,
-);
 
 function WorkspaceLeafContent(props: {}) {
   return (
@@ -36,30 +29,30 @@ function NavHeader(props: {}) {
   );
 }
 
-export function MyForest() {
-  const [contextState, setContextState] = useState(null)
-  useEffect(() => {
-    (async function anyNameFunction() {
-      const entryTree = new EntryTree()
-      await entryTree.fromDatabaseBuildTree("./sqlite.db")
-      setContextState(entryTree)
-    })();
+export function ETreeForest(prop: { app: App }) {
+  const {data, isSuccess} = useQuery({
+    queryKey: ["d"],
+    queryFn: async () => {
+      const context = new EntryTree()
+      await context.prepareDataBase("D:/GitHub/KCMS/.obsidian/plugins/infinite-file-tree/design/sqlite.db", prop.app)
+      await context.fromDatabaseBuildTree()
+      return context
+    }
   })
-  // domTree 递归是一层层访问的。
-  // 只需要id、name 和 上下文对象。
-  // 递归只需要传递上下文和下一层结点的属性
-
+  if (!isSuccess) return <>ForestElements</>
+  console.log(data.toString())
   // 深林结点，构造树结点
-  let Forest = [...contextState.getForest().childNodes].map(node => node as XMLElement).map(element =>
-    <TreeItemNavFile
-      context={contextState}
-      data={{
+  // domTree 递归是一层层访问的。只需要id、name 和 上下文对象。
+  const Forest = [...data.getForest().childNodes].map(node => node as XMLElement)
+  const ForestElements = Forest.map(element => {
+      return <TreeItemNavFile key={element.getAttribute("id")} context={data} data={{
         id: Number(element.getAttribute("id")),
         name: element.getAttribute("name"),
         depth: Number(element.getAttribute("depth")),
       }}/>
-  )
-  return (<>{Forest}</>)
+    }
+  );
+  return <>{ForestElements}</>;
 }
 
 function NavFilesContainer(props: {}) {
@@ -74,56 +67,45 @@ function NavFilesContainer(props: {}) {
 }
 
 function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
-  // 树结点
-  // 此节点的信息已经从父节点解析，只需要访问即可获得
-  // children需要从父节点解析后传递给子节点
   const depth = props.data.depth || 0;
-
   // 解析子结点
   const children: EntryNode[] = [];
-  const entry: EntryNode | null = null;
   [...props.context.findNodeElementById(props.data.id).childNodes]
     .map(node => node as XMLElement)
     .forEach(node => {
-      entry.id = Number(node.getAttribute("id"))
-      entry.name = node.getAttribute("name");
-      entry.depth = props.data.depth
-      children.push(entry);
+      children.push({
+        id: Number(node.getAttribute("id")),
+        name: node.getAttribute("name"),
+        depth: props.data.depth
+      });
     })
-  // const indentUnit = 17;
-  // const InlineStart = depth * indentUnit;
-  // marginInlineStart: `${-InlineStart}px`,
-  // paddingInlineStart: `${InlineStart + 4}px`,
+  const indentUnit = 17;
+  const InlineStart = depth * indentUnit;
+  const marginInlineStart = `${-InlineStart}px`;
+  const paddingInlineStart = `${InlineStart + 4}px`;
   return (
     <div className="tree-item nav-file">
       <div
         className="tree-item-self nav-file-title is-clickable mod-collapsible"
-        data-path="zephyr zone/pages/设计文稿"
         draggable="true"
-        style={{
-          textIndent: `${depth}em`,
-        }}>
-        <div
-          className="tree-item-icon collapse-icon is-collapsed"
-          style={{
-            display: 'inline-block',
-            width: '0.9rem',
-            height: '0.9rem',
-          }}>
-          <FileIcon></FileIcon>
-        </div>
-        <div
-          className="tree-item-inner nav-file-title-content"
-          style={{
-            display: 'inline-block',
-          }}>
+        style={{paddingLeft: paddingInlineStart}}
+      >
+        <div className="tree-item-inner nav-file-title-content" style={{display: 'inline-block'}}>
           {props.data.name}
         </div>
       </div>
-      {children.length > 0 &&
-        children.map((child) => {
-          // 传递当前子元素的 content 和 children 属性
-          return <TreeItemChildren
+      <TreeItemChildren context={props.context} children={[...children]}/>
+    </div>
+  );
+}
+
+function TreeItemChildren(props: { context: EntryTree, children: EntryNode[] }) {
+  return (
+    <div className="tree-item-children nav-file-children" style={{}}>
+      {/*<div style={{width: '260px', height: ' 0.1px', marginBottom: '0px'}}></div>*/}
+      {props.children.length > 0 &&
+        props.children.map((child) => {
+          return <TreeItemNavFile
             key={child.id}
             context={props.context}
             data={{
@@ -132,42 +114,6 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
               depth: child.depth,
             }}/>;
         })}
-    </div>
-  );
-}
-
-function TreeItemChildren(props: { context: EntryTree, data: EntryNode }) {
-  // 树的一个子结点。
-  return (
-    <div className="tree-item-children nav-file-children" style={{}}>
-      <div style={{width: '260px', height: ' 0.1px', marginBottom: '0px'}}></div>
-      <TreeItemNavFile
-        context={props.context}
-        data={{
-          id: props.data.id,
-          name: props.data.name,
-          depth: props.data.depth
-        }}/>
-      {/* <div className="tree-item nav-file is-collapsed">
-                  <div
-                      className="tree-item-self nav-file-title is-clickable mod-collapsible"
-                      data-path="zephyr zone/pages/设计文稿"
-                      draggable="true"
-                      style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
-                      <div className="tree-item-icon collapse-icon is-collapsed">3</div>
-                      <div className="tree-item-inner nav-file-title-content">设计文稿</div>
-                  </div>
-              </div>
-              <div className="tree-item nav-file is-collapsed">
-                  <div
-                      className="tree-item-self nav-file-title is-clickable mod-collapsible"
-                      data-path="zephyr zone/pages/在构思"
-                      draggable="true"
-                      style={{ marginInlineStart: '-34px !important', paddingInlineStart: '58px !important' }}>
-                      <div className="tree-item-icon collapse-icon is-collapsed">3</div>
-                      <div className="tree-item-inner nav-file-title-content">在构思</div>
-                  </div>
-              </div> */}
     </div>
   );
 }
