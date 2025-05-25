@@ -45,6 +45,9 @@ export function ETreeForest(prop: { app: App }) {
   // domTree 递归是一层层访问的。只需要id、name 和 上下文对象。
   const Forest = [...data.getForest().childNodes].map(node => node as XMLElement)
   const ForestElements = Forest.map(element => {
+      data.getNodeAttributeInDB(Number(element.getAttribute("id"))).then(value => {
+        console.log(value)
+      })
       return <TreeItemNavFile key={element.getAttribute("id")} context={data} data={{
         id: Number(element.getAttribute("id")),
         name: element.getAttribute("name"),
@@ -73,6 +76,9 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
   [...props.context.findNodeElementById(props.data.id).childNodes]
     .map(node => node as XMLElement)
     .forEach(node => {
+      props.context.getNodeAttributeInDB(Number(node.getAttribute("id"))).then(value => {
+        console.log(value)
+      })
       children.push({
         id: Number(node.getAttribute("id")),
         name: node.getAttribute("name"),

@@ -311,12 +311,14 @@ class EntryTree {
       const sql = `SELECT '${name}'
                    FROM ADJACENCY
                    WHERE id = '${nid}';`
-      return Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+      const result = Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+      return result.length > 0 ? result[0] : null
     } else {
       const sql = `SELECT *
                    FROM ADJACENCY
                    WHERE id = '${nid}';`
-      return Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+      const result = Array.from(await this.dbService.getQuery(sql)).map(line => line as EntryLine)
+      return result.length > 0 ? result[0] : null
     }
   }
 
