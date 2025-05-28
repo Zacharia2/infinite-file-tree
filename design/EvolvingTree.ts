@@ -688,4 +688,4 @@ async function TestDB() {
 
 // entryTree只用于表示树形结构和排序只需要id、name，而数据用DB查询修改，是否可以
 // 根据树生成树，然后根据树结点同步数据表，这样树中的每个结点都是一个数据表中的记录。
-TestDB().then(r => console.log("finish"))
+// TestDB().then(r => console.log("finish"))
