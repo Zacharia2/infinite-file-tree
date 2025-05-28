@@ -1,12 +1,13 @@
 import React from 'react';
 import {EntryTree, XMLElement} from './EvolvingTree'
-import {App} from "obsidian";
+import {App, Menu, TFolder} from "obsidian";
 import {useQuery} from "@tanstack/react-query";
 
 interface EntryNode {
   id: number; //条目ID
   name: string; //条目名字
   depth: number; //条目所在位置深度
+  app: App;
 }
 
 function WorkspaceLeafContent(props: {}) {
@@ -52,6 +53,7 @@ export function ETreeForest(prop: { app: App }) {
         id: Number(element.getAttribute("id")),
         name: element.getAttribute("name"),
         depth: Number(element.getAttribute("depth")),
+        app: prop.app
       }}/>
     }
   );
@@ -82,25 +84,60 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
       children.push({
         id: Number(node.getAttribute("id")),
         name: node.getAttribute("name"),
-        depth: props.data.depth
+        depth: props.data.depth,
+        app: props.data.app
       });
     })
+  const handleRootFolderContextMenu = (event: MouseEvent, folder?: TFolder) => {
+    // Event Undefined Correction
+    let e = event;
+    if (event === undefined) e = window.event as MouseEvent;
+
+    // Menu Items
+    const folderMenu = new Menu();
+
+    folderMenu.addItem((menuItem) => {
+      menuItem
+        .setTitle('New Folder')
+        .setIcon('folder')
+    });
+    folderMenu.addItem((menuItem) => {
+      menuItem
+        .setTitle('New Folder')
+        .setIcon('folder')
+    });
+    folderMenu.addItem((menuItem) => {
+      menuItem
+        .setTitle('New Folder')
+        .setIcon('folder')
+    });
+
+    // console.log(props.data.id)
+
+    // Trigger
+    props.data.app.workspace.trigger('root-folder-menu', folderMenu);
+    folderMenu.showAtPosition({x: e.pageX, y: e.pageY});
+    return false;
+  };
   const indentUnit = 17;
   const InlineStart = depth * indentUnit;
-  const marginInlineStart = `${-InlineStart}px`;
-  const paddingInlineStart = `${InlineStart + 4}px`;
+  const marginInlineStart = `${-InlineStart}px !important`;
+  const paddingInlineStart = `${InlineStart + 4}px !important`;
   return (
     <div className="tree-item nav-file">
       <div
         className="tree-item-self nav-file-title is-clickable mod-collapsible"
         draggable="true"
-        style={{paddingLeft: paddingInlineStart}}
+        style={{paddingLeft: `${InlineStart + 4}px`}}
+        onContextMenu={(event) => {
+          handleRootFolderContextMenu(event as unknown as MouseEvent)
+        }}
       >
         <div className="tree-item-inner nav-file-title-content" style={{display: 'inline-block'}}>
           {props.data.name}
         </div>
       </div>
-      <TreeItemChildren context={props.context} children={[...children]}/>
+      {children.length > 0 && <TreeItemChildren context={props.context} children={[...children]}/>}
     </div>
   );
 }
@@ -118,8 +155,10 @@ function TreeItemChildren(props: { context: EntryTree, children: EntryNode[] }) 
               id: child.id,
               name: child.name,
               depth: child.depth,
+              app: child.app
             }}/>;
-        })}
+        })
+      }
     </div>
   );
 }
