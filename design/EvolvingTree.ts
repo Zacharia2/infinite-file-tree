@@ -16,12 +16,15 @@
 // 只要了解某个语言件的语义，呢么他的逻辑构成, 它的更细微层级就不重要，就不需要放大。
 // 函数 类 模块 包，每个层次或每个层次的单体的意义就是用更小层次的单位构建当前层次的语义。
 // 例如 细胞的语义是由细胞膜细胞核细胞质等构成具有细胞功能的语义。
+
+// 加入虚拟链接结点，用于链接其它结点。
+
+// 深林，生长树，
 import {App} from "obsidian";
 import xmlFormat from 'xml-formatter';
 import {Document as XMLDocument, DOMParser, Element as XMLElement, XMLSerializer} from '@xmldom/xmldom';
 import initSqlJs, {Database, SqlJsStatic, Statement} from "sql.js";
-import {existsSync, readFileSync} from "fs";
-import {writeFile} from "fs/promises";
+import {existsSync, readFileSync, writeFileSync} from "fs";
 import path from "path";
 import {pinyin} from "pinyin-pro";
 
@@ -93,6 +96,8 @@ class NidRegister {
 
 class EntryTree {
   public static readonly FOREST_ID: string = "0"
+  // 获取和设置活动根结点，用于缩放树
+  public root: XMLElement;
   private readonly document: XMLDocument;
   private readonly forest: XMLElement;
   private readonly dom: DOMParser = new DOMParser();
@@ -107,6 +112,7 @@ class EntryTree {
   constructor() {
     this.document = this.dom.parseFromString(this.empty_xml, "text/xml");
     this.forest = this.document.getElementById(EntryTree.FOREST_ID)
+    this.root = this.forest;
     this.nidRegister = new NidRegister([Number(EntryTree.FOREST_ID)])
   }
 
@@ -133,6 +139,26 @@ class EntryTree {
   }
 
   /**
+   * 获取当前条目的祖先列表，排序从前到后。
+   * @param nid 条目ID
+   */
+  getAncestralList(nid: number): string[] {
+    let ancestralList: string[] = [];
+    let queue: string[] = [nid.toString()];
+    while (queue.length > 0) {
+      let nodeId = Number(queue.shift());
+      const node = this.findNodeElementById(nodeId)
+      if (node === null) return null
+      const parentNode = node.parentNode as XMLElement;
+      const parentId = parentNode.getAttribute("id");
+      if (parentId === EntryTree.FOREST_ID) break
+      ancestralList.push(parentId);
+      queue.push(parentId);
+    }
+    return ancestralList.reverse();
+  }
+
+  /**
    * @param dbPath sqlite数据库文件路径
    * @param app
    */
@@ -142,6 +168,9 @@ class EntryTree {
     if (this.dbService.getDB() == null) throw new Error("No DB found");
   }
 
+  /**
+   * 获取深林结点
+   */
   getForest(): XMLElement {
     return this.forest;
   }
@@ -591,7 +620,9 @@ class DBService {
       stmt = this.db.prepare(sql);
       stmt.bind(params);
       stmt.run();
-      writeFile(this.dbFile, this.db.export());
+      // TODO，写保护机制，若异常中断会导致数据全部丢失。
+      // import {writeFile} from "fs/promises"; writeFile(this.dbFile, this.db.export());
+      writeFileSync(this.dbFile, this.db.export());
     } finally {
       if (stmt) stmt.free();
     }
@@ -634,9 +665,10 @@ async function TestDB() {
 //   let a = await entryTree.createChildNode(1, {name: "Child"})
 // await entryTree.toString();
   await entryTree.sortBranch(1)
+  console.log(entryTree.getAncestralList(5))
   console.log(entryTree.toString())
 }
 
 // entryTree只用于表示树形结构和排序只需要id、name，而数据用DB查询修改，是否可以
 // 根据树生成树，然后根据树结点同步数据表，这样树中的每个结点都是一个数据表中的记录。
-// TestDB().then(r => console.log("finish"))
+TestDB().then(r => console.log("finish"))
