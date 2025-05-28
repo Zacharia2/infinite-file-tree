@@ -24,7 +24,8 @@ import {App} from "obsidian";
 import xmlFormat from 'xml-formatter';
 import {Document as XMLDocument, DOMParser, Element as XMLElement, XMLSerializer} from '@xmldom/xmldom';
 import initSqlJs, {Database, SqlJsStatic, Statement} from "sql.js";
-import {existsSync, readFileSync, writeFileSync} from "fs";
+import {existsSync, readFileSync} from "fs";
+import {writeFile, rename, unlink, copyFile} from "fs/promises";
 import path from "path";
 import {pinyin} from "pinyin-pro";
 
@@ -616,15 +617,31 @@ class DBService {
   async runQuery(sql: string, params: any[] = []) {
     if (!this.db) throw new Error("Database not loaded.");
     let stmt: Statement | null = null;
+    const bakDbFile = path.resolve(path.dirname(this.dbFile), this.dbFile + ".bak")
+    const tmpDbFile = path.resolve(path.dirname(this.dbFile), this.dbFile + ".tmp");
     try {
       stmt = this.db.prepare(sql);
       stmt.bind(params);
       stmt.run();
-      // TODO，写保护机制，若异常中断会导致数据全部丢失。
-      // import {writeFile} from "fs/promises"; writeFile(this.dbFile, this.db.export());
-      writeFileSync(this.dbFile, this.db.export());
+      // 写保护机制，若异常中断会导致数据全部丢失。
+      // 写入文件的安全机制——文件备份和临时文件；
+      // 写入临时文件并创建原始文件的备份
+      await writeFile(tmpDbFile, this.db.export());
+      await copyFile(this.dbFile, bakDbFile)
+      // 删除原来的目标文件，并使用写出的临时文件更新目标文件
+      await unlink(this.dbFile)
+      await rename(tmpDbFile, this.dbFile)
+    } catch (error) {
+      // 发生异常时回滚备份文件
+      await unlink(this.dbFile)
+      await rename(bakDbFile, this.dbFile)
+      console.error(error);
+      throw error
     } finally {
       if (stmt) stmt.free();
+      // 删除临时文件和备份文件
+      if (existsSync(bakDbFile)) await unlink(bakDbFile)
+      if (existsSync(tmpDbFile)) await unlink(tmpDbFile)
     }
   }
 
@@ -671,4 +688,4 @@ async function TestDB() {
 
 // entryTree只用于表示树形结构和排序只需要id、name，而数据用DB查询修改，是否可以
 // 根据树生成树，然后根据树结点同步数据表，这样树中的每个结点都是一个数据表中的记录。
-// TestDB().then(r => console.log("finish"))
+TestDB().then(r => console.log("finish"))
