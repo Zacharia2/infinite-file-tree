@@ -14,7 +14,7 @@ function WorkspaceLeafContent(props: {}) {
   return (
     <div className="workspace-leaf-content" data-type="file-explorer">
       <NavHeader></NavHeader>
-      <NavFilesContainer></NavFilesContainer>
+      {/*<ETreeForest></ETreeForest>*/}
     </div>
   );
 }
@@ -32,7 +32,7 @@ function NavHeader(props: {}) {
 
 export function ETreeForest(prop: { app: App }) {
   const {data, isSuccess} = useQuery({
-    queryKey: ["d"],
+    queryKey: ["db"],
     queryFn: async () => {
       const context = new EntryTree()
       await context.prepareDataBase("D:/GitHub/KCMS/.obsidian/plugins/infinite-file-tree/design/sqlite.db", prop.app)
@@ -46,9 +46,9 @@ export function ETreeForest(prop: { app: App }) {
   // domTree 递归是一层层访问的。只需要id、name 和 上下文对象。
   const Forest = [...data.getForest().childNodes].map(node => node as XMLElement)
   const ForestElements = Forest.map(element => {
-      data.getNodeAttributeInDB(Number(element.getAttribute("id"))).then(value => {
-        console.log(value)
-      })
+      // data.getNodeAttributeInDB(Number(element.getAttribute("id"))).then(value => {
+      //   console.log(value)
+      // })
       return <TreeItemNavFile key={element.getAttribute("id")} context={data} data={{
         id: Number(element.getAttribute("id")),
         name: element.getAttribute("name"),
@@ -57,16 +57,12 @@ export function ETreeForest(prop: { app: App }) {
       }}/>
     }
   );
-  return <>{ForestElements}</>;
-}
-
-function NavFilesContainer(props: {}) {
   return (
     <div className="nav-files-container node-insert-event show-unsupported" style={{position: 'relative'}}>
       <div style={{}}>
         <div style={{width: '294px', height: '0.1px', marginBottom: '0px'}}></div>
       </div>
-      <TreeItemNavFile context={null} data={undefined}/>
+      {ForestElements}
     </div>
   );
 }
@@ -78,9 +74,9 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
   [...props.context.findNodeElementById(props.data.id).childNodes]
     .map(node => node as XMLElement)
     .forEach(node => {
-      props.context.getNodeAttributeInDB(Number(node.getAttribute("id"))).then(value => {
-        console.log(value)
-      })
+      // props.context.getNodeAttributeInDB(Number(node.getAttribute("id"))).then(value => {
+      //   console.log(value)
+      // })
       children.push({
         id: Number(node.getAttribute("id")),
         name: node.getAttribute("name"),
@@ -112,7 +108,7 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
         .setIcon('folder')
     });
 
-    // console.log(props.data.id)
+    console.log(`${props.data.id}:: ${props.data.name}`)
 
     // Trigger
     props.data.app.workspace.trigger('root-folder-menu', folderMenu);
@@ -124,7 +120,7 @@ function TreeItemNavFile(props: { context: EntryTree, data: EntryNode }) {
   const marginInlineStart = `${-InlineStart}px !important`;
   const paddingInlineStart = `${InlineStart + 4}px !important`;
   return (
-    <div className="tree-item nav-file">
+    <div className="tree-item">
       <div
         className="tree-item-self nav-file-title is-clickable mod-collapsible"
         draggable="true"
