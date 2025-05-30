@@ -98,7 +98,7 @@ class NidRegister {
 class EntryTree {
   public static readonly FOREST_ID: string = "0"
   // 获取和设置活动根结点，用于缩放树
-  public root: XMLElement;
+  public activeRoot: XMLElement;
   private readonly document: XMLDocument;
   private readonly forest: XMLElement;
   private readonly dom: DOMParser = new DOMParser();
@@ -113,7 +113,7 @@ class EntryTree {
   constructor() {
     this.document = this.dom.parseFromString(this.empty_xml, "text/xml");
     this.forest = this.document.getElementById(EntryTree.FOREST_ID)
-    this.root = this.forest;
+    this.activeRoot = this.forest;
     this.nidRegister = new NidRegister([Number(EntryTree.FOREST_ID)])
   }
 

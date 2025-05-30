@@ -44,7 +44,7 @@ export function ETreeForest(prop: { app: App }) {
   console.log(data.toString())
   // 深林结点，构造树结点
   // domTree 递归是一层层访问的。只需要id、name 和 上下文对象。
-  const Forest = [...data.root.childNodes].map(node => node as XMLElement)
+  const Forest = [...data.activeRoot.childNodes].map(node => node as XMLElement)
   const ForestElements = Forest.map(element => {
       // data.getNodeAttributeInDB(Number(element.getAttribute("id"))).then(value => {
       //   console.log(value)
