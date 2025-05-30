@@ -1,9 +1,8 @@
-import { Plugin, addIcon, TAbstractFile, Notice } from 'obsidian';
-import { FileTreeView } from './FileTreeView';
-import { ZoomInIcon, ZoomOutIcon, ZoomOutDoubleIcon, LocationIcon, SpaceIcon } from './utils/icons';
-import { FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab, DEFAULT_SETTINGS } from './settings';
-import {VaultChange, eventTypes, BookmarksPluginItem} from 'utils/types';
-import { getBookmarkTitle } from 'utils/Utils';
+import {addIcon, Plugin, TAbstractFile} from 'obsidian';
+import {FileTreeView} from './FileTreeView';
+import {LocationIcon, SpaceIcon, ZoomInIcon, ZoomOutDoubleIcon, ZoomOutIcon} from './utils/icons';
+import {DEFAULT_SETTINGS, FileTreeAlternativePluginSettings, FileTreeAlternativePluginSettingsTab} from './settings';
+import {eventTypes, VaultChange} from 'utils/types';
 
 export default class FileTreeAlternativePlugin extends Plugin {
     settings: FileTreeAlternativePluginSettings;

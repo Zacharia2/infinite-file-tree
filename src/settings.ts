@@ -153,11 +153,11 @@ export class FileTreeAlternativePluginSettingsTab extends PluginSettingTab {
             .addToggle((toggle) =>
                 toggle.setValue(this.plugin.settings.bookmarksEvents).onChange((value) => {
                     this.plugin.settings.bookmarksEvents = value;
-                    if (value) {
-                        this.plugin.bookmarksAddEventListener();
-                    } else {
-                        this.plugin.bookmarksRemoveEventListener();
-                    }
+                    // if (value) {
+                    //     this.plugin.bookmarksAddEventListener();
+                    // } else {
+                    //     this.plugin.bookmarksRemoveEventListener();
+                    // }
                     this.plugin.saveSettings();
                 })
             );
