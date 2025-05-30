@@ -173,17 +173,3 @@ export const createNewFile = async (e: React.MouseEvent | null, folderPath: stri
     let modal = new VaultChangeModal(plugin, targetFolder, 'create note');
     modal.open();
 };
-
-export const getBookmarksPluginItems = (): BookmarksPluginItem[] => {
-    return (app as any).internalPlugins.plugins['bookmarks'].instance.items as BookmarksPluginItem[];
-};
-
-export const getBookmarkTitle = (title: string): BookmarksPluginItem => {
-    let bookmarkItems = getBookmarksPluginItems();
-    let titleParts = title.split('/');
-    let currentItem: BookmarksPluginItem = bookmarkItems.find((b) => b.title === titleParts[0]);
-    for (let i = 1; i < titleParts.length; i++) {
-        currentItem = currentItem.items.find((b) => b.title === titleParts[i]);
-    }
-    return currentItem;
-};
